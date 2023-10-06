@@ -1,30 +1,42 @@
 ---
-title: "Untitled"
+title: "Reading Data from APIs"
 output: github_document
+    theme: flatly
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(httr2)
+library(jsonlite)
+library(ggplot2)
+
 ```
 
-## GitHub Documents
+## Requirements
 
-This is an R Markdown format used for publishing markdown documents to GitHub. When you click the **Knit** button all R code chunks are run and a markdown file (.md) suitable for publishing to GitHub is generated.
+The packages used in this vignette are 
 
-## Including Code
+[tidyverse](https://www.tidyverse.org/)
+[httr2](https://httr2.r-lib.org/)
+[jsonlite](https://cran.r-project.org/package=jsonlite)
 
-You can include R code in the document as follows:
+## Functions
+## Exploratory Analysis
 
-```{r cars}
-summary(cars)
+```{r}
+#EDA Requirements (A few requirements about your EDA are below:
+#∗ You should pull data from at least two separate calls to your API functions
+#∗ You should create some contingency tables
+#∗ You should create numerical summaries for some quantitative variables at each setting of some
+#of your categorical variables
+#∗ You should create at least five plots utilizing coloring, grouping, etc. All plots should have
+#nice labels and titles.
+#· At least one plot that you create should be a plot that we didn’t cover in class (say a
+#heatmap or something like that - lots of good examples to consider here https://exts.
+#ggplot2.tidyverse.org/gallery/))
+
+
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
