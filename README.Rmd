@@ -8,7 +8,7 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
-library(httr2)
+library(httr)
 library(jsonlite)
 library(ggplot2)
 
@@ -19,10 +19,32 @@ library(ggplot2)
 The packages used in this vignette are 
 
 [tidyverse](https://www.tidyverse.org/)
-[httr2](https://httr2.r-lib.org/)
+[httr](https://httr2.r-lib.org/)
 [jsonlite](https://cran.r-project.org/package=jsonlite)
 
+## API
+
 ## Functions
+
+```{r}
+
+campgrounds <- GET("https://developer.nps.gov/api/v1/campgrounds?limit=1000&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+
+parsed_campgrounds <- fromJSON(rawToChar(campgrounds$content))
+
+activities <- GET("https://developer.nps.gov/api/v1/activities/parks?limit=100&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+
+parsed_activities <- fromJSON(rawToChar(activities$content))
+
+combined_activities <- parsed_activities$data %>%
+    enframe()
+
+
+
+
+```
+
+
 ## Exploratory Analysis
 
 ```{r}
