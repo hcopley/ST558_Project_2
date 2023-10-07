@@ -38,7 +38,38 @@ my_api_key <- 'iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf'
 
 ## Functions
 
-There are several functions I created in order to interact with the API. The first is `get_parks` which allows the user to get the state name, park code, and park name of each of the national parks. The user has a few options. They may enter a text value for the state abbreviation the whole state name, or "all" for all states. The state name and code are case insensitive. They may also enter a park code. 
+There are several functions I created in order to interact with the API. The first is `get_parks` which allows the user to get the park code, park name, state abbreviation(s), and a description of each of the national parks. The user has a few options. They may enter a text value for the state abbreviation the whole state name, or "all" for all states. The state name and code are case insensitive. They may also enter a park code. 
+
+The National Parks API allows the user to set a limit of how many results to return. This is helpful if you don't want to return too many results, but can be problematic if you don't know how many results there actually are. Thankfully when the data is returned the total number of possible results is also returned in a field called "total". We will use this field to make sure we don't inadvertently return too few results. 
+
+```{r}
+
+get_max_api_results <- function(url) {
+    
+    #call the api
+    api_call <- GET(url)
+    
+    #parse the data from JSON
+    parsed_data <- fromJSON(rawToChar(api_call$content))
+    
+    #if the number of results possible is greater than the number of results returned, call the api again with the max possible results
+    if(as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
+        
+        url <- paste0(url, '&limit=', parsed_data$total)
+        
+        api_call <- GET(url)
+        
+        parsed_data <- fromJSON(rawToChar(api_call$content))
+    
+    }
+    
+    #return the parsed_data
+    return(parsed_data)
+    
+}
+
+```
+
 
 
 ```{r}
@@ -46,7 +77,7 @@ There are several functions I created in order to interact with the API. The fir
 get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) { 
     
     #start with a base url of the api call
-    base_url <-  'https://developer.nps.gov/api/v1/parks?'
+    url <-  'https://developer.nps.gov/api/v1/parks?'
     
     #convert the state parameter to lower case
     state <- tolower(state)
@@ -62,40 +93,35 @@ get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) {
         
     }
     
-    #if the user enters 'all' for the state
-    if(state == 'all') {
-        
-        #keep the base_url as is
-        url <- base_url
-        
+    
     #if the user entered a state abbreviation (or a state name that has been converted to an abbreviation)
-    }else if(state %in% state_abbs) {
+    if(state %in% state_abbs) {
         
         #add the state parameter to the url
-        url <- paste0(bas_url,'&state=', state)
-    
-    #otherwise
-    }else {
+        url <- paste0(url,'&state=', state)
+        
+    #if the state is not an abbreviation or 'all'
+    }else if(!state %in% c('all', state_abbs)) {
         
         #output a helpful error message
         stop("Please enter a valid state name or abbreviation or 'all' to query all states")
+        
     }
+    
     
     #if the park code is not null
     if(!is.null(park_code)) {
         
         #add the park_code to the url
-       url <- paste0(base_url,'&park=', state) 
+       url <- paste0(url,'&park=', state) 
     }
-
-    #call the api
     
-    api_call <- GET(url)
+    #add the api key to the url
+    url <- paste0(url,'&api_key=', my_api_key)
+   
+    out <- get_max_api_results(url)
     
-    #parse the data from JSON
-    out <- fromJSON(rawToChar(api_call))
-    
-    out
+    return(out)
     
 }
 
@@ -105,8 +131,9 @@ Now let's test out our function:
 
 ```{r}
 
-test <- get_parks()
+test <- get_parks(state = 'nc')
 
+as.numeric(test$limit) < as.numeric(test$total)
 
 ```
 
@@ -133,6 +160,8 @@ amenities <- parsed_campgrounds$amenities
 ?unnest    
 
 activities <- GET("https://developer.nps.gov/api/v1/activities/parks?limit=100&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+
+activities$content
 
 parsed_activities <- fromJSON(rawToChar(activities$content))
 
