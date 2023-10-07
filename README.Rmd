@@ -11,6 +11,7 @@ library(tidyverse)
 library(httr)
 library(jsonlite)
 library(ggplot2)
+library(tidyjson)
 
 ```
 
@@ -24,21 +25,123 @@ The packages used in this vignette are
 
 ## API
 
+I wanted to query the National Parks service API which provides information about US National Parks. In order to interact with this API you will need an api key. You can register for a free API key [here](https://www.nps.gov/subjects/developer/get-started.htm). This API allows 1,000 requests per hour! That's pretty generous as far as APIs go. You can also read more information about it in the [API Guide](https://www.nps.gov/subjects/developer/guides.htm). In order to keep my own API key a secret I have aliased it in the remaining code as `my_api_key`, but you can create a variable called `my_api_key` which will be the default of the functions in this vignette, or you can simply enter your api key into the functions.  
+
+
+```{r, echo = FALSE}
+
+#nothing to see here
+my_api_key <- 'iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf'
+
+```
+
+
 ## Functions
+
+There are several functions I created in order to interact with the API. The first is `get_parks` which allows the user to get the state name, park code, and park name of each of the national parks. The user has a few options. They may enter a text value for the state abbreviation the whole state name, or "all" for all states. The state name and code are case insensitive. They may also enter a park code. 
+
 
 ```{r}
 
-campgrounds <- GET("https://developer.nps.gov/api/v1/campgrounds?limit=1000&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) { 
+    
+    #start with a base url of the api call
+    base_url <-  'https://developer.nps.gov/api/v1/parks?'
+    
+    #convert the state parameter to lower case
+    state <- tolower(state)
+    #convert built in state abbreviations and state names to lower case
+    state_abbs <- tolower(state.abb)
+    state_names <- tolower(state.name)
+    
+    #if the state entered by the user is a state name:
+    if(state %in% state_names) {
+        
+         #get the index of the state.name and return the abbreviation at that index
+        state <- state_abbs[which(state_names == state)]
+        
+    }
+    
+    #if the user enters 'all' for the state
+    if(state == 'all') {
+        
+        #keep the base_url as is
+        url <- base_url
+        
+    #if the user entered a state abbreviation (or a state name that has been converted to an abbreviation)
+    }else if(state %in% state_abbs) {
+        
+        #add the state parameter to the url
+        url <- paste0(bas_url,'&state=', state)
+    
+    #otherwise
+    }else {
+        
+        #output a helpful error message
+        stop("Please enter a valid state name or abbreviation or 'all' to query all states")
+    }
+    
+    #if the park code is not null
+    if(!is.null(park_code)) {
+        
+        #add the park_code to the url
+       url <- paste0(base_url,'&park=', state) 
+    }
 
-parsed_campgrounds <- fromJSON(rawToChar(campgrounds$content))
+    #call the api
+    
+    api_call <- GET(url)
+    
+    #parse the data from JSON
+    out <- fromJSON(rawToChar(api_call))
+    
+    out
+    
+}
+
+```
+
+Now let's test out our function:
+
+```{r}
+
+test <- get_parks()
+
+
+```
+
+
+
+
+```{r scratchpad, echo = FALSE, eval = FALSE}
+state.name
+state.abb
+
+campgrounds <- GET("https://developer.nps.gov/api/v1/campgrounds/amenities?limit=1000&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+
+alerts <- GET("https://developer.nps.gov/api/v1/alerts?api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+
+test <- fromJSON(rawToChar(alerts$content))
+
+parsed_campgrounds <- fromJSON(rawToChar(campgrounds$content))$data %>%
+    unnest(amenities, names_sep = '_') %>%
+    unnest(fees, names_sep = '_') %>%
+    unnest(passportStampImages, names_sep = '_')
+
+amenities <- parsed_campgrounds$amenities
+    
+?unnest    
 
 activities <- GET("https://developer.nps.gov/api/v1/activities/parks?limit=100&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
 
 parsed_activities <- fromJSON(rawToChar(activities$content))
 
 combined_activities <- parsed_activities$data %>%
-    enframe()
+    rename('activity' = name) %>%
+    unnest(parks)
 
+activities_with_campgrounds <- parsed_campgrounds %>%
+    inner_join(combined_activities, by = park_code)
 
 
 
