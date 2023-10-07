@@ -46,6 +46,7 @@ The National Parks API allows the user to set a limit of how many results to ret
 
 get_max_api_results <- function(url) {
     
+    
     #call the api
     api_call <- GET(url)
     
@@ -53,6 +54,7 @@ get_max_api_results <- function(url) {
     parsed_data <- fromJSON(rawToChar(api_call$content))
     
     #if the number of results possible is greater than the number of results returned, call the api again with the max possible results
+    
     if(as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
         
         url <- paste0(url, '&limit=', parsed_data$total)
@@ -70,14 +72,9 @@ get_max_api_results <- function(url) {
 
 ```
 
-
-
 ```{r}
 
-get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) { 
-    
-    #start with a base url of the api call
-    url <-  'https://developer.nps.gov/api/v1/parks?'
+get_state_code <- function(state) {
     
     #convert the state parameter to lower case
     state <- tolower(state)
@@ -93,15 +90,14 @@ get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) {
         
     }
     
-    
-    #if the user entered a state abbreviation (or a state name that has been converted to an abbreviation)
+    #if the state is not an abbreviation (or has been converted to one by the previous if statement)
     if(state %in% state_abbs) {
         
-        #add the state parameter to the url
-        url <- paste0(url,'&state=', state)
+        #return the abbreviation
+        return(state)
         
-    #if the state is not an abbreviation or 'all'
-    }else if(!state %in% c('all', state_abbs)) {
+    #if the state is not an abbreviation
+    }else{
         
         #output a helpful error message
         stop("Please enter a valid state name or abbreviation or 'all' to query all states")
@@ -109,17 +105,74 @@ get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) {
     }
     
     
+    
+} 
+
+
+```
+
+
+```{r}
+
+get_park_codes <- function(state = NULL, api_key = my_api_key) {
+    
+     #start with a base url of the api call
+    url <-  'https://developer.nps.gov/api/v1/parks?'
+    
+    #if the state parameter is not null
+    if(!is.null(state)) {
+        
+        #get the state code
+        state_code <- get_state_code(state)
+        
+        #add the state code parameter to the url
+        url <- paste0(url,'&stateCode=', state)
+    
+    }
+    
+    #add the api key to the url
+    url <- paste0(url,'&api_key=', api_key)
+   
+    out <- get_max_api_results(url)
+    
+    out <- out$data %>% 
+        select(parkCode)
+    
+    return(out)
+    
+}
+
+test <- get_park_codes('az')
+
+get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) { 
+    
+    #start with a base url of the api call
+    url <-  'https://developer.nps.gov/api/v1/parks?'
+    
+    if(state != 'all') {
+        
+        #get the state code
+        state_code <- get_state_code(state)
+        
+        #add the state code parameter to the url
+        url <- paste0(url,'&stateCode=', state)
+    
+    }
+    
     #if the park code is not null
     if(!is.null(park_code)) {
         
         #add the park_code to the url
-       url <- paste0(url,'&park=', state) 
+       url <- paste0(url,'&parkCode=', park_code) 
     }
     
     #add the api key to the url
     url <- paste0(url,'&api_key=', my_api_key)
    
     out <- get_max_api_results(url)
+    
+    out <- out$data %>% 
+        select(fullName, parkCode, designation, description)
     
     return(out)
     
@@ -131,9 +184,21 @@ Now let's test out our function:
 
 ```{r}
 
+
 test <- get_parks(state = 'nc')
 
 as.numeric(test$limit) < as.numeric(test$total)
+
+test <- GET(api_url) 
+
+test_again <- fromJSON(rawToChar(test$content))
+
+
+visitation <- GET('https://irma.nps.gov/Stats/SSRSReports/National%20Reports/Query%20Builder%20for%20Public%20Use%20Statistics%20(1979%20-%20Last%20Calendar%20Year)')
+
+visits <-rawToChar(visitation$content)
+
+javascript:void(0)
 
 ```
 
@@ -144,13 +209,13 @@ as.numeric(test$limit) < as.numeric(test$total)
 state.name
 state.abb
 
-campgrounds <- GET("https://developer.nps.gov/api/v1/campgrounds/amenities?limit=1000&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
+campgrounds <- GET("https://developer.nps.gov/api/v1/campgrounds?stateCode=NC&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
 
 alerts <- GET("https://developer.nps.gov/api/v1/alerts?api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
 
 test <- fromJSON(rawToChar(alerts$content))
 
-parsed_campgrounds <- fromJSON(rawToChar(campgrounds$content))$data %>%
+parsed_campgrounds <- fromJSON(rawToChar(campgrounds$content)) %>%
     unnest(amenities, names_sep = '_') %>%
     unnest(fees, names_sep = '_') %>%
     unnest(passportStampImages, names_sep = '_')
@@ -173,6 +238,20 @@ activities_with_campgrounds <- parsed_campgrounds %>%
     inner_join(combined_activities, by = park_code)
 
 
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+
+visitation_data <- read_csv('Public Use Statistics (1979 - Last Calendar Year).csv')
 
 ```
 
