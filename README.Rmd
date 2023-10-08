@@ -38,43 +38,18 @@ my_api_key <- 'iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf'
 
 ## Functions
 
-There are several functions I created in order to interact with the API. The first is `get_parks` which allows the user to get the park code, park name, state abbreviation(s), and a description of each of the national parks. The user has a few options. They may enter a text value for the state abbreviation the whole state name, or "all" for all states. The state name and code are case insensitive. They may also enter a park code. 
+There are several functions I created in order to interact with the API. 
 
-The National Parks API allows the user to set a limit of how many results to return. This is helpful if you don't want to return too many results, but can be problematic if you don't know how many results there actually are. Thankfully when the data is returned the total number of possible results is also returned in a field called "total". We will use this field to make sure we don't inadvertently return too few results. 
+### Helper Functions
 
-```{r}
+#### `get_state_codes`
 
-get_max_api_results <- function(url) {
-    
-    
-    #call the api
-    api_call <- GET(url)
-    
-    #parse the data from JSON
-    parsed_data <- fromJSON(rawToChar(api_call$content))
-    
-    #if the number of results possible is greater than the number of results returned, call the api again with the max possible results
-    
-    if(as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
-        
-        url <- paste0(url, '&limit=', parsed_data$total)
-        
-        api_call <- GET(url)
-        
-        parsed_data <- fromJSON(rawToChar(api_call$content))
-    
-    }
-    
-    #return the parsed_data
-    return(parsed_data)
-    
-}
+The first is a helper function `get_state_codes`. For some of the API endpoints the National Parks Service allows the user to enter the two character state abbreviation. In our final API function we want to be a bit more flexible and allow the user to be able to enter the name of a state, the two digit state code, or two leave the state parameter blank (the default will be null) to return all states. The `get_state_codes` function takes one parameter which is either the name of a state, the state abbreviation, and either returns a corresponding state abbrevation or ensures that the state abbreviation entered is valid. It uses the built in R datasets [state.abb](https://www.rdocumentation.org/packages/datasets/versions/3.6.2/topics/state) and [state.name](https://www.rdocumentation.org/packages/datasets/versions/3.6.2/topics/state).
 
-```
 
 ```{r}
 
-get_state_code <- function(state) {
+get_state_codes <- function(state) {
     
     #convert the state parameter to lower case
     state <- tolower(state)
@@ -104,12 +79,46 @@ get_state_code <- function(state) {
         
     }
     
-    
-    
 } 
 
 
 ```
+
+#### `get_max_results`
+
+The National Parks APIs allow the user to set a limit of how many results to return, and if the user does not specify a default limit is set (usually 50 for most endpoints). This is helpful if you don't want to return too many results, but can be problematic if you don't know how many results there actually are. Thankfully when the data is returned the total number of possible results is also returned in a field called "total" as well as the limit set in a field called "limit". Using these fields I created a function to make sure we don't inadvertently return too few results. 
+
+```{r}
+get_max_results <- function(url) {
+    
+    
+    #call the api and get results
+    api_call <- GET(url)
+    
+    #parse the data from JSON
+    parsed_data <- fromJSON(rawToChar(api_call$content), simplifyDataFrame = TRUE)
+    
+    #if the number of results possible is greater than the number of results returned, call the api again with the max possible results
+    if(as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
+        
+        url <- paste0(url, '&limit=', parsed_data$total)
+        
+        api_call <- GET(url)
+        
+        parsed_data <- fromJSON(rawToChar(api_call$content), simplifyDataFrame = TRUE)
+    
+    }
+    
+    #return the parsed_data
+    return(parsed_data)
+    
+}
+
+```
+
+#### `get_park_codes`
+
+Some NPS API endpoints do not allow the user to enter a state and instead require the park code. These definitely are not values that I would expect many people to know off of the top of their head. To help the user out I created another helper function called `get_park_codes`. This function has a state parameter which can be left blank (default null) to select all park codes, or using the `get_state_code` helper function the user can enter a state abbreviation or name. The function calls the parks endpoint and returns a character vector of all of the park codes associated with that state. 
 
 
 ```{r}
@@ -123,43 +132,81 @@ get_park_codes <- function(state = NULL, api_key = my_api_key) {
     if(!is.null(state)) {
         
         #get the state code
-        state_code <- get_state_code(state)
+        state_code <- get_state_codes(state)
         
         #add the state code parameter to the url
-        url <- paste0(url,'&stateCode=', state)
+        url <- paste0(url,'&stateCode=', state_code)
     
     }
     
     #add the api key to the url
     url <- paste0(url,'&api_key=', api_key)
    
+    #get the max number of results available from the api
     out <- get_max_api_results(url)
     
+    #output a character vector of park codes
     out <- out$data %>% 
-        select(parkCode)
+        pull(parkCode) %>%
+        unique()
     
     return(out)
     
 }
 
-test <- get_park_codes('az')
+```
 
-get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) { 
+Once our data has been returned from the API and parsed we will need a little extra help flattening it into a neat tibble or a list of tibbles. For example when calling the parks API endpoint the data returned contains list columns for certain variables even after using `fromJSON` in the [jsonlite](https://cran.r-project.org/web/packages/jsonlite/vignettes/json-aaquickstart.html) package. This function takes a tibble or data.frame that contains list columns and a character vector for the column name. It returns a tibble with the park code and the values of the list column as a tibble. For this we use the `unnest` function from the [purrr](https://purrr.tidyverse.org/) package. 
+
+```{r}
+
+rectangle_data <- function(.data, col_name) {
+    
+    out <- .data %>%
+        #select the park code and the supplied column name
+        select(parkCode, all_of(col_name)) %>%
+        #unnest the column name into its own columns
+        unnest(col_name) %>%
+        #deselect any id or exception columns as we will not need them
+        select(-matches('id|exception')) %>%
+        #prefix all of the resulting unnested columns with the name of the column
+        rename_at(vars(-parkCode), ~paste0(col_name, '_', .)) %>%
+        #return a flattened tibble
+        flatten() %>%
+        tibble()
+    
+    return(out)
+    
+}
+
+```
+
+
+### API Functions
+
+#### `get_park_info`
+
+With the helper functions set, I'm ready to interact with the API to bring back data. The first endpoint I want to interact with is the parks endpoint. This endpoint provides a lot of information about each park as we will see. To bring back data from this endpoint I created a function `get_park_info`. The endpoint allows the user to enter a state or a park code, so we will use our `get_state_codes` helper function, but we won't need `get_park_codes` this time. We will also need our `get_max_results` and `rectangle_data` functions.
+
+```{r}
+
+get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, datasets = NULL, output_tibble = FALSE) { 
     
     #start with a base url of the api call
     url <-  'https://developer.nps.gov/api/v1/parks?'
     
-    if(state != 'all') {
+    #if the user enters a state name or code
+    if(!is.null(state)) {
         
         #get the state code
-        state_code <- get_state_code(state)
+        state_code <- get_state_codes(state)
         
         #add the state code parameter to the url
-        url <- paste0(url,'&stateCode=', state)
+        url <- paste0(url,'&stateCode=', state_code)
     
     }
     
-    #if the park code is not null
+    #if user enters a park code
     if(!is.null(park_code)) {
         
         #add the park_code to the url
@@ -169,14 +216,185 @@ get_parks <- function(state = 'all', park_code = NULL, api_key = my_api_key) {
     #add the api key to the url
     url <- paste0(url,'&api_key=', my_api_key)
    
-    out <- get_max_api_results(url)
+    #get the maximum restuls from the api
+    res <- get_max_api_results(url)
     
-    out <- out$data %>% 
-        select(fullName, parkCode, designation, description)
     
+    #if the user does not specify any datasets default to all of these options
+    if(is.null(datasets)) {
+        
+        datasets <- list('activities', 'topics', 'entranceFees', 'entrancePasses', 'operatingHours')
+        
+    #otherwise convert the character vector entered by the user to a list    
+    } else {
+        
+        datasets <- as.list(datasets)
+    }
+    
+    #rectangle the datasets specified by the user
+    out <- datasets %>%
+        #name datasets list with it's own character vectors (e.g, list('activities' = 'activities', 'topics' = 'topics'))
+        set_names(.) %>%
+        #map over the rectangle data function to apply it to each dataset selected this will return a list of tibbles
+        map(~rectangle_data(.data = res$data, col_name = .)) %>%
+        #prepend the remaining park information that does not contain list columns to the list
+        append(list('park_info' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
+    
+    #if the user selects the output to be a tibble left join the datasets together on the parkcode
+    if(output_tibble) {
+        
+        out <- out %>%
+            reduce(left_join, by = 'parkCode')
+    }
+    
+    #return data
     return(out)
     
 }
+
+```
+
+I also wanted to explore the campgrounds available at the parks. The NPS API has a campground endpoint which provides information about different campsites, how many spots are available, hours of operation, types of campsites, cost, etc. To gather this data I created a `get_campground_info` function.
+
+```{r}
+
+get_campground_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, datasets = NULL, output_tibble = FALSE) { 
+    
+    #start with a base url of the api call
+    url <-  'https://developer.nps.gov/api/v1/campgrounds?'
+    
+    #if the user enters a state name or code
+    if(!is.null(state)) {
+        
+        #get the state code
+        state_code <- get_state_codes(state)
+        
+        #add the state code parameter to the url
+        url <- paste0(url,'&stateCode=', state_code)
+    
+    }
+    
+    #if user enters a park code
+    if(!is.null(park_code)) {
+        
+        #add the park_code to the url
+       url <- paste0(url,'&parkCode=', park_code) 
+    }
+    
+    #add the api key to the url
+    url <- paste0(url,'&api_key=', my_api_key)
+   
+    #get the maximum restuls from the api
+    res <- get_max_api_results(url)
+    
+    
+    #if the user does not specify any datasets default to all of these options
+    if(is.null(datasets)) {
+        
+        datasets <- list('activities', 'topics', 'entranceFees', 'entrancePasses', 'operatingHours')
+        
+    #otherwise convert the character vector entered by the user to a list    
+    } else {
+        
+        datasets <- as.list(datasets)
+    }
+    
+    #rectangle the datasets specified by the user
+    out <- datasets %>%
+        #name datasets list with it's own character vectors (e.g, list('activities' = 'activities', 'topics' = 'topics'))
+        set_names(.) %>%
+        #map over the rectangle data function to apply it to each dataset selected this will return a list of tibbles
+        map(~rectangle_data(.data = res$data, col_name = .)) %>%
+        #prepend the remaining park information that does not contain list columns to the list
+        append(list('park_info' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
+    
+    #if the user selects the output to be a tibble left join the datasets together on the parkcode
+    if(output_tibble) {
+        
+        out <- out %>%
+            reduce(left_join, by = 'parkCode')
+    }
+    
+    #return data
+    return(out)
+    
+}
+
+```
+
+
+
+
+
+
+
+The next two API endpoints I wanted to explore are related to amenities of the parks. There is "amenities/parksplaces" which provides information about the amenities of places within each park, and "amenities/parksvisitorcenters" which provides information about the amenities of the park visitor centers. This endpoint allows search terms such as "wheelchair access" or "accessibility"
+
+```{r}
+
+
+
+```
+
+
+lets test out our function: 
+
+```{r}
+
+test <- get_park_info(state = 'North Carolina', datasets = c('activities', 'entranceFees'), output_tibble = FALSE)
+
+```
+
+
+
+
+```{r}
+
+
+
+what <- test %>%
+    discard(is.list)
+
+test <- get_park_info(state = 'MI')
+
+#get the names of each of the list columns
+list_col_names <- test %>%
+    map(class) %>%
+    keep(has_element, 'list') %>%
+    names()
+
+col_name <- 'operatingHours'
+
+this <- test %>%
+    select(fees)
+
+
+this <- test %>%
+    
+    
+this <- test %>%
+    unnest(cols = these)
+    
+    
+
+new <- test %>%
+    select(parkCode, all_of(col_name)) %>%
+    unnest(col_name) %>%
+    select(-matches('id|exceptions')) %>%
+    rename_at(vars(-parkCode), ~paste0(col_name, '_', .)) %>%
+    flatten()
+
+
+
+    unnest_longer('activities') %>%
+    unnest_longer('topics') %>%
+    unnest_longer('entranceFees') %>%
+    unnest_longer('entrancePasses') %>%
+    unnest_longer('operatingHours') %>%
+    unnest_longer('operatingHours')
+
+new <- test %>%
+    select(parkCode, fees)
 
 ```
 
@@ -184,6 +402,7 @@ Now let's test out our function:
 
 ```{r}
 
+test <- get_park_info(state = 'michigan')
 
 test <- get_parks(state = 'nc')
 
