@@ -12,6 +12,7 @@ library(httr)
 library(jsonlite)
 library(ggplot2)
 library(tidyjson)
+library(plotly)
 
 ```
 
@@ -105,7 +106,7 @@ get_max_results <- function(url) {
         
         api_call <- GET(url)
         
-        parsed_data <- fromJSON(rawToChar(api_call$content), simplifyDataFrame = TRUE)
+        parsed_data <- fromJSON(rawToChar(api_call$content))
     
     }
     
@@ -164,16 +165,18 @@ rectangle_data <- function(.data, col_name) {
     
     out <- .data %>%
         #select the park code and the supplied column name
-        select(parkCode, all_of(col_name)) %>%
+        select(parkCode, name, all_of(col_name)) %>%
         #unnest the column name into its own columns
-        unnest(col_name) %>%
+        unnest(col_name, names_sep = '_') %>%
         #deselect any id or exception columns as we will not need them
         select(-matches('id|exception')) %>%
         #prefix all of the resulting unnested columns with the name of the column
-        rename_at(vars(-parkCode), ~paste0(col_name, '_', .)) %>%
+        rename_at(vars(-parkCode, -name), ~paste0(col_name, '_', .)) %>%
         #return a flattened tibble
         flatten() %>%
-        tibble()
+        tibble() %>%
+        #unnest again for deeper nested lists
+        unnest()
     
     return(out)
     
@@ -244,7 +247,7 @@ get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, 
     if(output_tibble) {
         
         out <- out %>%
-            reduce(left_join, by = 'parkCode')
+            reduce(left_join, by = c('parkCode', 'name'))
     }
     
     #return data
@@ -258,10 +261,10 @@ I also wanted to explore the campgrounds available at the parks. The NPS API has
 
 ```{r}
 
-get_campground_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, datasets = NULL, output_tibble = FALSE) { 
+get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, datasets = NULL, output_tibble = FALSE, endpoint = 'campgrounds') { 
     
-    #start with a base url of the api call
-    url <-  'https://developer.nps.gov/api/v1/campgrounds?'
+    #start with a base url of the api call and add the endpoint
+    url <-  paste0('https://developer.nps.gov/api/v1/', endpoint, '?')
     
     #if the user enters a state name or code
     if(!is.null(state)) {
@@ -285,13 +288,17 @@ get_campground_info <- function(state = NULL, park_code = NULL, api_key = my_api
     url <- paste0(url,'&api_key=', my_api_key)
    
     #get the maximum restuls from the api
-    res <- get_max_api_results(url)
+    res <- get_max_results(url)
     
     
-    #if the user does not specify any datasets default to all of these options
+    
+    
+    #if the user does not specify any datasets default to all of the options for that endpoint
     if(is.null(datasets)) {
         
-        datasets <- list('activities', 'topics', 'entranceFees', 'entrancePasses', 'operatingHours')
+        datasets <- switch(endpoint,
+           'parks' = list('activities', 'topics', 'entranceFees', 'entrancePasses', 'operatingHours'),
+           'campgrounds' = list('amenities', 'fees', 'operatingHours', 'campsites', 'accessibility'))
         
     #otherwise convert the character vector entered by the user to a list    
     } else {
@@ -306,13 +313,13 @@ get_campground_info <- function(state = NULL, park_code = NULL, api_key = my_api
         #map over the rectangle data function to apply it to each dataset selected this will return a list of tibbles
         map(~rectangle_data(.data = res$data, col_name = .)) %>%
         #prepend the remaining park information that does not contain list columns to the list
-        append(list('park_info' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
+        append(list('data' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
     
     #if the user selects the output to be a tibble left join the datasets together on the parkcode
     if(output_tibble) {
         
         out <- out %>%
-            reduce(left_join, by = 'parkCode')
+            reduce(left_join, by = c('parkCode', 'name'))
     }
     
     #return data
@@ -332,8 +339,38 @@ The next two API endpoints I wanted to explore are related to amenities of the p
 
 ```{r}
 
+campground_data <- get_park_info(state = 'NC', endpoint = 'campgrounds', datasets = c('accessibility', 'fees', 'amenities'), output_tibble = FALSE)
+
+park_data <- get_park_info(state = 'NC', endpoint = 'parks', output_tibble = FALSE) 
+
+park_names <- park_data$data %>%
+    select(parkCode, fullName)
+
+campsites <- campground_data$data %>%
+    select(name, parkCode, numberOfSitesReservable, numberOfSitesFirstComeFirstServe) %>%
+    mutate_at(vars(numberOfSitesReservable, numberOfSitesFirstComeFirstServe), as.numeric) %>%
+    group_by(name, parkCode) %>%
+    pivot_longer(cols = matches('Sites'), names_to = 'site_type', values_to = 'campsites') %>%
+    mutate(site_type = str_remove_all(site_type, 'numberOfSites')) %>%
+    inner_join(park_names, by = 'parkCode')
+    
+    
+
+#which park has more walkup sites
+ggplot(data = campsites, aes(x = fullName, y = campsites, fill = site_type)) +
+    geom_bar(position = 'stack', stat = 'identity') +
+    scale_x_discrete(guide = guide_axis(angle = 30)) +
+    scale_fill_discrete(name = "") +
+    theme_minimal() +
+    labs(x = NULL, title = 'Number of Campsites by Reservability', subtitle = 'National Parks of North Carolina') 
+    
+    
+    
+    facet_wrap(~fullName, scales = 'free') +
 
 
+
+    
 ```
 
 
@@ -345,6 +382,86 @@ test <- get_park_info(state = 'North Carolina', datasets = c('activities', 'entr
 
 ```
 
+
+#### Contingency Tables
+
+Which parks have the most amenities
+
+```{r}
+
+campground_data <- get_park_info(endpoint = 'campgrounds', datasets = c('accessibility', 'fees'), output_tibble = TRUE)
+
+
+campground_data %>%
+    select(matches('wheelchair')) %>%
+    rename('wheelchairAccess') %>%
+    distinct()
+
+amenities <- get_max_results(paste0("https://developer.nps.gov/api/v1/amenities/parksplaces?",'&api_key=', my_api_key))
+amenities_visitor_center <- get_max_results(paste0("https://developer.nps.gov/api/v1/amenities/parksvisitorcenters?",'&api_key=', my_api_key))
+
+parsed_amenities <- amenities_visitor_center$data %>%
+    map(pluck, 'parks') %>%
+    map(as.data.frame) %>%
+    set_names(parsed_amenity_names) %>%
+    compact() %>%
+    map(unnest, visitorcenters, names_sep = '_') %>%
+    map(select, states, parkCode, fullName, visitorcenters_name) %>%
+    enframe() %>%
+    unnest(value) %>% 
+    separate_rows(states) %>%
+    group_by(parkCode, fullName, name) %>%
+    summarise(n_visitorcenters = n_distinct(visitorcenters_name), n_states = n_distinct(states)) %>%
+    ungroup() %>%
+    group_by(parkCode, fullName, n_states) %>%
+    pivot_wider(names_from = name, values_from = n_visitorcenters, values_fn = sum, values_fill = 0) %>%
+    ungroup()
+
+
+test_rooms <- parsed_amenities %>%
+    filter(str_detect(name, 'Restroom')) %>%
+    filter(str_detect(fullName, 'Blue Ridge'))
+    
+restrooms <- parsed_amenities %>%
+    select(parkCode, fullName, matches('Restroom')) %>%
+    filter(Restroom > 0) %>%
+    mutate(accessibility_ratio = `Restroom - Accessible`/Restroom)
+
+parsed_amenities$n_states
+
+parsed_amenities %>%
+    group_by(parkCode, fullName)
+    
+    
+    
+    map(separate_rows, states) %>%
+    map(distinct) %>%
+    map(group_by, parkCode, fullName) %>%
+    map(summarise, n_places = n_distinct(places_title), n_states = n_distinct(states)) 
+
+parkCode, fullName, places_title, amenity_name, states
+
+
+test <- parsed_amenities$`Restroom` %>%
+    select(states, parkCode, fullName, places_title) %>%
+    separate_rows(states) %>%
+    distinct() %>%
+    group_by(parkCode, fullName) %>%
+    summarise(n_places = n_distinct(places_title), n_states = n_distinct(states))
+
+test <- parsed_amenities$`Restroom` %>%
+    select(states, parkCode, fullName, places_title) %>%
+    separate_rows(states) %>%
+    distinct() %>%
+    group_by(parkCode, fullName) %>%
+    summarise(n_places = n_distinct(places_title), n_states = n_distinct(states))
+
+```
+
+
+#### Numerical Summaries
+
+#### Plots
 
 
 
