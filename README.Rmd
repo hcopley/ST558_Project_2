@@ -369,6 +369,22 @@ ggplot(data = campsites, aes(x = fullName, y = campsites, fill = site_type)) +
     facet_wrap(~fullName, scales = 'free') +
 
 
+campgrounds_by_park <- park_data$data %>%
+        select(parkCode, fullName) %>%
+        left_join(campground_data %>% 
+                      select(parkCode, name) %>%
+                      , by = 'parkCode')
+
+        
+activities_by_park <- park_data$data %>%
+        select(parkCode, fullName) %>%
+        left_join(park_data$activities , by = 'parkCode') %>%
+        select(fullName, activity = activities_activities_name) %>%
+        distinct() %>%
+        mutate(dummy = 1) %>%
+        group_by(activity) %>%
+        pivot_wider(names_from = fullName, values_from = dummy, values_fill = 0)
+    
 
     
 ```
@@ -379,6 +395,78 @@ lets test out our function:
 ```{r}
 
 test <- get_park_info(state = 'North Carolina', datasets = c('activities', 'entranceFees'), output_tibble = FALSE)
+
+```
+
+### Scatter Plot
+
+```{r}
+
+#avg fee vs total sites
+
+campground_national_data <- get_park_info(datasets = c('fees', 'accessibility'), output_tibble = FALSE)
+
+accessibility <- campground_national_data$accessibility %>%
+    select(campground = name, 
+          # accessRoads = accessibility_accessibility_accessRoads,
+           classifications = accessibility_accessibility_classifications) %>%
+    mutate(dummy = 1) %>%
+    group_by(campground) %>%
+    pivot_wider(names_from =classifications, values_from = dummy, values_fn = max, values_fill = 0) %>%
+   # mutate(dummy = 1) %>%
+    #pivot_wider(names_from =accessRoads, values_from = dummy, values_fn = sum)
+
+
+sum(duplicated(accessibility$campground))
+
+
+
+roads <- campground_national_data$accessibility$accessibility_accessibility_classifications %>% unique()
+
+fees_by_campground <- campground_national_data$fees %>%
+    select(parkCode, campground = name, cost = fees_fees_cost) %>%
+    mutate(cost = as.numeric(cost)) %>%
+    group_by(parkCode, campground) %>%
+    summarise(min = min(cost), avg = mean(cost), median = median(cost), max = max(cost))
+
+sites_and_fees <- campground_national_data$data %>%
+    select(parkCode, campground = name, numberOfSitesReservable, numberOfSitesFirstComeFirstServe, isPassportStampLocation) %>%
+    mutate(reservable = as.numeric(numberOfSitesReservable), 
+           walkup = as.numeric(numberOfSitesFirstComeFirstServe),
+           total_sites = reservable + walkup) %>%
+    inner_join(fees_by_campground, by = c('parkCode', 'campground')) %>%
+    inner_join(accessibility, by = 'campground') %>%
+    filter(avg < 400)
+    
+
+sites_and_fees_plot <- ggplot(data = sites_and_fees, aes(x = reservable, y = avg)) +
+           geom_point(aes(color = `Developed Campground`)) +
+    geom_smooth(method = lm)
+
+ggplotly(sites_and_fees_plot)
+
+```
+
+
+
+### Box Plot
+
+```{r}
+
+campground_fee_data <- get_park_info(datasets = 'fees', endpoint = 'campgrounds')
+
+fees <- campground_data$fees %>%
+    select(parkCode, cost = fees_fees_cost) %>%
+    inner_join(park_data$data %>% select(fullName, parkCode)) %>%
+    mutate(cost = as.numeric(cost)) 
+
+ggplot(data = fees, aes(x = cost)) +
+    geom_histogram()
+
+ggplot(data = fees, aes(y = cost, fill = fullName)) +
+    geom_boxplot()
+
+
 
 ```
 
