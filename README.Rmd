@@ -13,6 +13,7 @@ library(jsonlite)
 library(ggplot2)
 library(tidyjson)
 library(plotly)
+library(DT)
 
 ```
 
@@ -509,22 +510,69 @@ test <- get_park_info(state = 'North Carolina', datasets = c('activities', 'entr
 
 ```
 
-### Scatter Plot
+### Contingency Tables
 
 ```{r}
 
-#avg fee vs total sites
+#What types of parks do our National Parks have?
+campground_classifications <- get_park_info(endpoint = 'campgrounds',
+                                            datasets = 'accessibility.classifications',
+                                             output_tibble = TRUE) %>%
+    mutate(classification = replace_na(accessibility.classifications, 'Not Classified'))
+
 
 park_names <- get_park_codes()
 
+park_classifications <- park_names %>%
+    inner_join(campground_classifications, by = 'parkCode') %>%
+    select(fullName, classification) %>%
+    table() %>%
+    as.data.frame() %>%
+    pivot_wider(names_from = classification, values_from = Freq) %>%
+    arrange(-`Developed Campground`)
+    
+
+datatable(park_classifications)
+
+
+```
+
+
+```{r}
+
+#internet connectivity and cellphone reception
 campgrounds <- get_park_info(endpoint = 'campgrounds',
                              datasets = c('main_data'), 
                              output_tibble = TRUE) %>%
-    select(id,parkCode,name) %>%
-    inner_join(park_names, by = 'parkCode')
+    inner_join(park_names, by = 'parkCode') 
+
+internet_and_phone <- campgrounds %>%
+    select(amenities.internetConnectivity, amenities.cellPhoneReception) %>%
+    filter(amenities.internetConnectivity != '' & amenities.cellPhoneReception != '') %>%
+    table()
+
+knitr::kable(internet_and_phone)
 
 
+```
 
+
+```{r}
+campgrounds_per_park <- campgrounds %>%
+    group_by(fullName) %>%
+    summarise(campgrounds = n_distinct(name))
+
+
+knitr::kable(campgrounds_per_park %>% 
+                 arrange(-campgrounds),
+             col.names = c('Park', 'Number of Campgrounds')
+             )
+
+```
+
+
+```{r}
+#avg fee vs total sites
 
 campground_fees <- get_park_info(endpoint = 'campgrounds', 
                                           datasets = c('fees'),
@@ -546,7 +594,7 @@ sites_and_fees <- sites_per_campground %>%
     
 
 
-ggplotly(sites_and_fees_plot)
+ggplotly(sites_and_fees_plot )
 
 ```
 
