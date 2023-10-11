@@ -106,12 +106,12 @@ get_max_results <- function(url) {
         
         api_call <- GET(url)
         
-        parsed_data <- fromJSON(rawToChar(api_call$content))
+        #parsed_data <- fromJSON(rawToChar(api_call$content))
     
     }
     
     #return the parsed_data
-    return(parsed_data)
+    return(api_call)
     
 }
 
@@ -144,12 +144,15 @@ get_park_codes <- function(state = NULL, api_key = my_api_key) {
     url <- paste0(url,'&api_key=', api_key)
    
     #get the max number of results available from the api
-    out <- get_max_api_results(url)
+    res <- get_max_results(url)
     
-    #output a character vector of park codes
-    out <- out$data %>% 
-        pull(parkCode) %>%
-        unique()
+    #parse the content
+    content <- fromJSON(rawToChar(res$content))
+    
+    #output a dataframe with the distinct park names and codes
+    out <- content$data %>% 
+        select(parkCode, fullName) %>%
+        distinct()
     
     return(out)
     
@@ -161,23 +164,112 @@ Once our data has been returned from the API and parsed we will need a little ex
 
 ```{r}
 
-rectangle_data <- function(.data, col_name) {
+df <- out[[2]] %>%
+    
+new_df <- handle_list_columns('amenities.toilets', df) 
+    
+
+    mutate_at(amenities.toilets, ~map(., select, -matches('id')))
+    
+    select(id, amenities.toilets) %>%
+    filter(lengths(amenities.toilets) != 0) %>%
+
+column_names <- out[[1]] 
+
+test <- column_names %>%
+    map(handle_list_columns, df)
+
+handle_list_columns <- function(list_column, .data) {
+    
+    #ensym the list_column parameter so that it may be passed in the functions
+    column_name <- ensym(list_column)
     
     out <- .data %>%
-        #select the park code and the supplied column name
-        select(parkCode, name, all_of(col_name)) %>%
-        #unnest the column name into its own columns
-        unnest(col_name, names_sep = '_') %>%
-        #deselect any id or exception columns as we will not need them
-        select(-matches('id|exception')) %>%
-        #prefix all of the resulting unnested columns with the name of the column
-        rename_at(vars(-parkCode, -name), ~paste0(col_name, '_', .)) %>%
-        #return a flattened tibble
-        flatten() %>%
-        tibble() %>%
-        #unnest again for deeper nested lists
-        unnest()
+        #select the id and the list column name
+        select(id,!!column_name) %>%
+        #remove empty columns
+        filter(lengths(!!column_name) != 0) %>%
+        #unnest the list column 
+        unnest(!!column_name, names_sep = '')
+   
+   #return the data
+   return(out)
+}
+
+
+```
+
+
+```{r}
+
+rectangle_data <- function(.data, output_tibble = FALSE, datasets = NULL) {
     
+    #flatten the data and remove columns we are not interested in
+    dat <- flatten(.data) %>%
+        select(-matches('passportStampImages|images|multimedia|contacts|addresses|operatingHours')) 
+        
+    #create a data frame with all of the columns that are character vectors (i.e are already flat)
+    flat_data <- dat %>%
+        select_if(is.character)
+    
+    #select columns that are not character vector columns along with the id (for joining later or associating with other datasets)
+    #these columns will need to be flattened separately due to ragged hierarchy
+    list_columns <- dat %>%
+        select(id, where(negate(is.character)))
+    
+    #get a character vector of the names of the columns that need to be unnested further
+    list_cols <- list_columns %>%
+        select(-id) %>%
+        names()
+    
+    #handle the remaing list columns using our handle_list_columns function
+    out <- as.list(list_cols) %>%
+        set_names(list_cols) %>%
+        map(handle_list_columns, list_columns) %>%
+        #remove empty dataframes from the resulting list of dataframes
+        discard(~nrow(.x) == 0) %>%
+        #prepend the flattened data to the begining of the list of dataframes
+        append(list('main_data' = flat_data),  after = 0)
+    
+    #if the user entered the datasets parameter
+    if(!is.null(datasets)) {
+        
+        #if all of the dataset names the user entered are valid
+        if(all(datasets %in% names(out))) {
+        
+            #if the user did not select to include all of the main data
+            if(!'main_data' %in% datasets) {
+            
+              #get the ids parkCodes and name/fullName from the main data
+              all_ids <- out$main_data %>%
+                 select(id, parkCode, matches('fullName|name'))
+            
+                #subset the data to just the datasets the user selected
+                 out <- out[datasets] %>%
+                #prepend all of the ids to the list of dataframes selected
+                append(list('all_ids' = all_ids), after = 0)
+            
+         #subset the data to just the datasets the user selected
+            } else  {
+                out <- out[datasets] 
+                }
+        } else {
+            #throw an error and output a helpful message
+            stop("Please enter valid dataset(s)")
+        }
+        
+        
+       
+    }
+    
+     #if the user selects the output to be a tibble left join the datasets together on the parkcode
+    if(output_tibble) {
+        
+        out <- out %>%
+            reduce(left_join, by = 'id')
+    }
+    
+    #return data
     return(out)
     
 }
@@ -191,77 +283,12 @@ rectangle_data <- function(.data, col_name) {
 
 With the helper functions set, I'm ready to interact with the API to bring back data. The first endpoint I want to interact with is the parks endpoint. This endpoint provides a lot of information about each park as we will see. To bring back data from this endpoint I created a function `get_park_info`. The endpoint allows the user to enter a state or a park code, so we will use our `get_state_codes` helper function, but we won't need `get_park_codes` this time. We will also need our `get_max_results` and `rectangle_data` functions.
 
-```{r}
-
-get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, datasets = NULL, output_tibble = FALSE) { 
-    
-    #start with a base url of the api call
-    url <-  'https://developer.nps.gov/api/v1/parks?'
-    
-    #if the user enters a state name or code
-    if(!is.null(state)) {
-        
-        #get the state code
-        state_code <- get_state_codes(state)
-        
-        #add the state code parameter to the url
-        url <- paste0(url,'&stateCode=', state_code)
-    
-    }
-    
-    #if user enters a park code
-    if(!is.null(park_code)) {
-        
-        #add the park_code to the url
-       url <- paste0(url,'&parkCode=', park_code) 
-    }
-    
-    #add the api key to the url
-    url <- paste0(url,'&api_key=', my_api_key)
-   
-    #get the maximum restuls from the api
-    res <- get_max_api_results(url)
-    
-    
-    #if the user does not specify any datasets default to all of these options
-    if(is.null(datasets)) {
-        
-        datasets <- list('activities', 'topics', 'entranceFees', 'entrancePasses', 'operatingHours')
-        
-    #otherwise convert the character vector entered by the user to a list    
-    } else {
-        
-        datasets <- as.list(datasets)
-    }
-    
-    #rectangle the datasets specified by the user
-    out <- datasets %>%
-        #name datasets list with it's own character vectors (e.g, list('activities' = 'activities', 'topics' = 'topics'))
-        set_names(.) %>%
-        #map over the rectangle data function to apply it to each dataset selected this will return a list of tibbles
-        map(~rectangle_data(.data = res$data, col_name = .)) %>%
-        #prepend the remaining park information that does not contain list columns to the list
-        append(list('park_info' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
-    
-    #if the user selects the output to be a tibble left join the datasets together on the parkcode
-    if(output_tibble) {
-        
-        out <- out %>%
-            reduce(left_join, by = c('parkCode', 'name'))
-    }
-    
-    #return data
-    return(out)
-    
-}
-
-```
 
 I also wanted to explore the campgrounds available at the parks. The NPS API has a campground endpoint which provides information about different campsites, how many spots are available, hours of operation, types of campsites, cost, etc. To gather this data I created a `get_campground_info` function.
 
 ```{r}
 
-get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, datasets = NULL, output_tibble = FALSE, endpoint = 'campgrounds') { 
+get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, endpoint = 'campgrounds', ...) { 
     
     #start with a base url of the api call and add the endpoint
     url <-  paste0('https://developer.nps.gov/api/v1/', endpoint, '?')
@@ -290,37 +317,30 @@ get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, 
     #get the maximum restuls from the api
     res <- get_max_results(url)
     
+    #extract the content from the JSON object
+    content <- fromJSON(rawToChar(res$content))
     
+    #extract the data
+    dat <- content$data
     
-    
-    #if the user does not specify any datasets default to all of the options for that endpoint
-    if(is.null(datasets)) {
-        
-        datasets <- switch(endpoint,
-           'parks' = list('activities', 'topics', 'entranceFees', 'entrancePasses', 'operatingHours'),
-           'campgrounds' = list('amenities', 'fees', 'operatingHours', 'campsites', 'accessibility'))
-        
-    #otherwise convert the character vector entered by the user to a list    
-    } else {
-        
-        datasets <- as.list(datasets)
-    }
+    #get the data into a list of dataframes or a single tibble based on user selection
+    out <- rectangle_data(dat, ...)
     
     #rectangle the datasets specified by the user
-    out <- datasets %>%
+    #out <- datasets %>%
         #name datasets list with it's own character vectors (e.g, list('activities' = 'activities', 'topics' = 'topics'))
-        set_names(.) %>%
+     #   set_names(.) %>%
         #map over the rectangle data function to apply it to each dataset selected this will return a list of tibbles
-        map(~rectangle_data(.data = res$data, col_name = .)) %>%
+#        map(~rectangle_data(.data = res$data, col_name = .)) %>%
         #prepend the remaining park information that does not contain list columns to the list
-        append(list('data' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
+     #   append(list('data' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
     
     #if the user selects the output to be a tibble left join the datasets together on the parkcode
-    if(output_tibble) {
+  #  if(output_tibble) {
         
-        out <- out %>%
-            reduce(left_join, by = c('parkCode', 'name'))
-    }
+   #     out <- out %>%
+   #         reduce(left_join, by = c('parkCode', 'name'))
+   # }
     
     #return data
     return(out)
@@ -329,19 +349,106 @@ get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, 
 
 ```
 
-
-
-
-
-
-
 The next two API endpoints I wanted to explore are related to amenities of the parks. There is "amenities/parksplaces" which provides information about the amenities of places within each park, and "amenities/parksvisitorcenters" which provides information about the amenities of the park visitor centers. This endpoint allows search terms such as "wheelchair access" or "accessibility"
 
 ```{r}
 
-campground_data <- get_park_info(state = 'NC', endpoint = 'campgrounds', datasets = c('accessibility', 'fees', 'amenities'), output_tibble = FALSE)
+park_data <- get_park_info( endpoint = 'campgrounds', output_tibble = TRUE, datasets = 'fees')
 
-park_data <- get_park_info(state = 'NC', endpoint = 'parks', output_tibble = FALSE) 
+
+all(c('topics','amenities') %in% names(park_data))
+
+test <- park_data[datas]
+
+call <- GET(paste0('https://developer.nps.gov/api/v1/campgrounds?', '&api_key=', my_api_key))
+           
+
+content <- fromJSON(rawToChar(call$content))
+
+dat <- content$data
+
+
+
+
+
+    
+    
+    
+    
+    mutate(activities = map(activities, ~select(.,-id)) %>% 
+    
+
+test <- as.list(list_cols) %>%
+    set_names(list_cols) %>%
+    map(handle_list_columns, lists) %>%
+    discard(~nrow(.x) == 0)
+
+test <- handle_list_columns(fees, lists)
+
+
+fees <- lists %>%
+    select(id,fees) %>%
+    filter(lengths(fees) != 0) %>%
+    unnest(fees)
+
+operating_hours <- lists %>%
+    select(id,operatingHours) %>%
+    filter(lengths(operatingHours) != 0) %>%
+    unnest(operatingHours)
+    
+exceptions <- operating_hours %>%
+    select(id, exceptions) %>%
+    filter(lengths(exceptions) != 0) %>%
+    unnest(exceptions)
+
+
+amenties <- lists %>%
+    select(id, amenities.potableWater) %>%
+    filter(lengths(amenities.potableWater) != 0) %>%
+    unnest(amenities.potableWater)
+
+    
+    map(enframe) %>%
+    map(unnest) %>%
+    map(class)
+    enframe() %>%
+    unnest() %>%
+    
+    select_if(is.character)
+
+not_flat_data <- dat %>%
+    flatten() %>%
+    select_if(negate(is.character)) %>%
+    map(enframe) %>%
+    map(unnest) %>%
+    map(select, -name) %>%
+    map_at('operatingHours', flatten)
+
+test <- fromJSON(rawToChar(park_data$content))$data
+
+test_3 <-
+
+test_2 <- fromJSON(rawToChar(park_data$content), flatten = FALSE)$data %>%
+    select_if(is.data.frame)
+
+setdiff(names(test_2), names(test))
+
+identical(test$data,test_2$data)
+
+test_spread <- test %>%  
+    enter_object(data) %>% 
+    gather_array() %>% 
+    spread_all() %>%
+    select(id,url,fullName,parkCode,description,latitude,latLong,states,directionsInfo,weatherInfo,name,designation)
+
+data <- test_spread %>%
+    select()
+ 
+test_JSON <- test_spread$..JSON[[1]]$data
+
+campground_data <- get_park_info( output_tibble = FALSE)
+
+park_data <- get_park_info(endpoint = 'parks', output_tibble = FALSE) 
 
 park_names <- park_data$data %>%
     select(parkCode, fullName)
@@ -355,6 +462,10 @@ campsites <- campground_data$data %>%
     inner_join(park_names, by = 'parkCode')
     
     
+
+x <- as.factor(c('a','b','b','c','f'))
+
+x[4] <- 'd'
 
 #which park has more walkup sites
 ggplot(data = campsites, aes(x = fullName, y = campsites, fill = site_type)) +
@@ -404,44 +515,36 @@ test <- get_park_info(state = 'North Carolina', datasets = c('activities', 'entr
 
 #avg fee vs total sites
 
-campground_national_data <- get_park_info(datasets = c('fees', 'accessibility'), output_tibble = FALSE)
+park_names <- get_park_codes()
 
-accessibility <- campground_national_data$accessibility %>%
-    select(campground = name, 
-          # accessRoads = accessibility_accessibility_accessRoads,
-           classifications = accessibility_accessibility_classifications) %>%
-    mutate(dummy = 1) %>%
-    group_by(campground) %>%
-    pivot_wider(names_from =classifications, values_from = dummy, values_fn = max, values_fill = 0) %>%
-   # mutate(dummy = 1) %>%
-    #pivot_wider(names_from =accessRoads, values_from = dummy, values_fn = sum)
-
-
-sum(duplicated(accessibility$campground))
+campgrounds <- get_park_info(endpoint = 'campgrounds',
+                             datasets = c('main_data'), 
+                             output_tibble = TRUE) %>%
+    select(id,parkCode,name) %>%
+    inner_join(park_names, by = 'parkCode')
 
 
 
-roads <- campground_national_data$accessibility$accessibility_accessibility_classifications %>% unique()
 
-fees_by_campground <- campground_national_data$fees %>%
-    select(parkCode, campground = name, cost = fees_fees_cost) %>%
-    mutate(cost = as.numeric(cost)) %>%
-    group_by(parkCode, campground) %>%
-    summarise(min = min(cost), avg = mean(cost), median = median(cost), max = max(cost))
+campground_fees <- get_park_info(endpoint = 'campgrounds', 
+                                          datasets = c('fees'),
+                                          output_tibble = TRUE)
 
-sites_and_fees <- campground_national_data$data %>%
-    select(parkCode, campground = name, numberOfSitesReservable, numberOfSitesFirstComeFirstServe, isPassportStampLocation) %>%
+
+campground_sites <- get_park_info(endpoint = 'campgrounds', 
+                                  datasets = c('main_data'), 
+                                  output_tibble = TRUE)
+
+sites_per_campground <- campground_sites %>%
     mutate(reservable = as.numeric(numberOfSitesReservable), 
            walkup = as.numeric(numberOfSitesFirstComeFirstServe),
-           total_sites = reservable + walkup) %>%
-    inner_join(fees_by_campground, by = c('parkCode', 'campground')) %>%
-    inner_join(accessibility, by = 'campground') %>%
-    filter(avg < 400)
+           total_sites = as.numeric(campsites.totalSites)) %>%
+    select(id, parkCode, name, reservable, walkup, total_sites)
+
+sites_and_fees <- sites_per_campground %>%
+    inner_join(campground_fees, by = c('id', 'parkCode', 'name'))
     
 
-sites_and_fees_plot <- ggplot(data = sites_and_fees, aes(x = reservable, y = avg)) +
-           geom_point(aes(color = `Developed Campground`)) +
-    geom_smooth(method = lm)
 
 ggplotly(sites_and_fees_plot)
 
