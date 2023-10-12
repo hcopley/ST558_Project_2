@@ -6,7 +6,7 @@ df_print: paged
 ---
 
 ```{r setup, include=FALSE, warning = FALSE, message = FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, tidy.opts = list(width.cutoff = 60), tidy = TRUE)
 
 library(tidyverse)
 library(httr)
@@ -104,7 +104,8 @@ get_max_results <- function(url) {
     #parse the data from JSON
     parsed_data <- fromJSON(rawToChar(api_call$content), simplifyDataFrame = TRUE)
     
-    #if the number of results possible is greater than the number of results returned, call the api again with the max possible results
+    #if the number of results possible is greater than the number of results returned, 
+    #call the api again with the max possible results
     if(as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
         
         url <- paste0(url, '&limit=', parsed_data$total)
@@ -207,7 +208,8 @@ rectangle_data <- function(.data, output_tibble = FALSE, datasets = NULL) {
     flat_data <- dat %>%
         select_if(is.character)
     
-    #select columns that are not character vector columns along with the id (for joining later or associating with other datasets)
+    #select columns that are not character vector columns along with the id 
+    #(for joining later or associating with other datasets)
     #these columns will need to be flattened separately due to ragged hierarchy
     list_columns <- dat %>%
         select(id, where(negate(is.character)))
@@ -257,7 +259,8 @@ rectangle_data <- function(.data, output_tibble = FALSE, datasets = NULL) {
        
     }
     
-     #if the user selects the output to be a tibble left join the datasets together on the parkcode
+     #if the user selects the output to be a tibble 
+    #left join the datasets together on the parkcode
     if(output_tibble) {
         
         out <- out %>%

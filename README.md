@@ -51,36 +51,39 @@ and
 
 ``` r
 get_state_codes <- function(state) {
-    
-    #convert the state parameter to lower case
+
+    # convert the state parameter to lower case
     state <- tolower(state)
-    #convert built in state abbreviations and state names to lower case
+    # convert built in state abbreviations and state names
+    # to lower case
     state_abbs <- tolower(state.abb)
     state_names <- tolower(state.name)
-    
-    #if the state entered by the user is a state name:
-    if(state %in% state_names) {
-        
-         #get the index of the state.name and return the abbreviation at that index
+
+    # if the state entered by the user is a state name:
+    if (state %in% state_names) {
+
+        # get the index of the state.name and return the
+        # abbreviation at that index
         state <- state_abbs[which(state_names == state)]
-        
+
     }
-    
-    #if the state is not an abbreviation (or has been converted to one by the previous if statement)
-    if(state %in% state_abbs) {
-        
-        #return the abbreviation
+
+    # if the state is not an abbreviation (or has been
+    # converted to one by the previous if statement)
+    if (state %in% state_abbs) {
+
+        # return the abbreviation
         return(state)
-        
-    #if the state is not an abbreviation
-    }else{
-        
-        #output a helpful error message
+
+        # if the state is not an abbreviation
+    } else {
+
+        # output a helpful error message
         stop("Please enter a valid state name or abbreviation or 'all' to query all states")
-        
+
     }
-    
-} 
+
+}
 ```
 
 #### `get_max_results`
@@ -97,28 +100,30 @@ too few results.
 
 ``` r
 get_max_results <- function(url) {
-    
-    
-    #call the api and get results
+
+    # call the api and get results
     api_call <- GET(url)
-    
-    #parse the data from JSON
+
+    # parse the data from JSON
     parsed_data <- fromJSON(rawToChar(api_call$content), simplifyDataFrame = TRUE)
-    
-    #if the number of results possible is greater than the number of results returned, call the api again with the max possible results
-    if(as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
-        
-        url <- paste0(url, '&limit=', parsed_data$total)
-        
+
+    # if the number of results possible is greater than the
+    # number of results returned, call the api again with
+    # the max possible results
+    if (as.numeric(parsed_data$limit) < as.numeric(parsed_data$total)) {
+
+        url <- paste0(url, "&limit=", parsed_data$total)
+
         api_call <- GET(url)
-        
-        #parsed_data <- fromJSON(rawToChar(api_call$content))
-    
+
+        # parsed_data <-
+        # fromJSON(rawToChar(api_call$content))
+
     }
-    
-    #return the parsed_data
+
+    # return the parsed_data
     return(api_call)
-    
+
 }
 ```
 
@@ -136,37 +141,38 @@ park codes associated with that state.
 
 ``` r
 get_park_codes <- function(state = NULL, api_key = my_api_key) {
-    
-     #start with a base url of the api call
-    url <-  'https://developer.nps.gov/api/v1/parks?'
-    
-    #if the state parameter is not null
-    if(!is.null(state)) {
-        
-        #get the state code
+
+    # start with a base url of the api call
+    url <- "https://developer.nps.gov/api/v1/parks?"
+
+    # if the state parameter is not null
+    if (!is.null(state)) {
+
+        # get the state code
         state_code <- get_state_codes(state)
-        
-        #add the state code parameter to the url
-        url <- paste0(url,'&stateCode=', state_code)
-    
+
+        # add the state code parameter to the url
+        url <- paste0(url, "&stateCode=", state_code)
+
     }
-    
-    #add the api key to the url
-    url <- paste0(url,'&api_key=', api_key)
-   
-    #get the max number of results available from the api
+
+    # add the api key to the url
+    url <- paste0(url, "&api_key=", api_key)
+
+    # get the max number of results available from the api
     res <- get_max_results(url)
-    
-    #parse the content
+
+    # parse the content
     content <- fromJSON(rawToChar(res$content))
-    
-    #output a dataframe with the distinct park names and codes
-    out <- content$data %>% 
+
+    # output a dataframe with the distinct park names and
+    # codes
+    out <- content$data %>%
         select(parkCode, fullName) %>%
         distinct()
-    
+
     return(out)
-    
+
 }
 ```
 
@@ -186,20 +192,21 @@ package which is part of the tidyverse.
 
 ``` r
 handle_list_columns <- function(list_column, .data) {
-    
-    #ensym the list_column parameter so that it may be passed in the functions
+
+    # ensym the list_column parameter so that it may be
+    # passed in the functions
     column_name <- ensym(list_column)
-    
+
     out <- .data %>%
-        #select the id and the list column name
-        select(id,!!column_name) %>%
-        #remove empty columns
-        filter(lengths(!!column_name) != 0) %>%
-        #unnest the list column 
-        unnest(!!column_name, names_sep = '')
-   
-   #return the data
-   return(out)
+        # select the id and the list column name
+    select(id, !!column_name) %>%
+        # remove empty columns
+    filter(lengths(!!column_name) != 0) %>%
+        # unnest the list column
+    unnest(!!column_name, names_sep = "")
+
+    # return the data
+    return(out)
 }
 ```
 
@@ -221,75 +228,88 @@ or how little data they would like to return.
 
 ``` r
 rectangle_data <- function(.data, output_tibble = FALSE, datasets = NULL) {
-    
-    #flatten the data and remove columns we are not interested in
+
+    # flatten the data and remove columns we are not
+    # interested in
     dat <- flatten(.data) %>%
-        select(-matches('passportStampImages|images|multimedia|contacts|addresses|operatingHours')) 
-        
-    #create a data frame with all of the columns that are character vectors (i.e are already flat)
+        select(-matches("passportStampImages|images|multimedia|contacts|addresses|operatingHours"))
+
+    # create a data frame with all of the columns that are
+    # character vectors (i.e are already flat)
     flat_data <- dat %>%
         select_if(is.character)
-    
-    #select columns that are not character vector columns along with the id (for joining later or associating with other datasets)
-    #these columns will need to be flattened separately due to ragged hierarchy
+
+    # select columns that are not character vector columns
+    # along with the id (for joining later or associating
+    # with other datasets) these columns will need to be
+    # flattened separately due to ragged hierarchy
     list_columns <- dat %>%
         select(id, where(negate(is.character)))
-    
-    #get a character vector of the names of the columns that need to be unnested further
+
+    # get a character vector of the names of the columns
+    # that need to be unnested further
     list_cols <- list_columns %>%
         select(-id) %>%
         names()
-    
-    #handle the remaing list columns using our handle_list_columns function
+
+    # handle the remaing list columns using our
+    # handle_list_columns function
     out <- as.list(list_cols) %>%
         set_names(list_cols) %>%
         map(handle_list_columns, list_columns) %>%
-        #remove empty dataframes from the resulting list of dataframes
-        discard(~nrow(.x) == 0) %>%
-        #prepend the flattened data to the begining of the list of dataframes
-        append(list('main_data' = flat_data),  after = 0)
-    
-    #if the user entered the datasets parameter
-    if(!is.null(datasets)) {
-        
-        #if all of the dataset names the user entered are valid
-        if(all(datasets %in% names(out))) {
-        
-            #if the user did not select to include all of the main data
-            if(!'main_data' %in% datasets) {
-            
-              #get the ids parkCodes and name/fullName from the main data
-              all_ids <- out$main_data %>%
-                 select(id, parkCode, matches('fullName|name'))
-            
-                #subset the data to just the datasets the user selected
-                 out <- out[datasets] %>%
-                #prepend all of the ids to the list of dataframes selected
-                append(list('all_ids' = all_ids), after = 0)
-            
-         #subset the data to just the datasets the user selected
-            } else  {
-                out <- out[datasets] 
-                }
+        # remove empty dataframes from the resulting list
+        # of dataframes
+    discard(~nrow(.x) == 0) %>%
+        # prepend the flattened data to the begining of the
+        # list of dataframes
+    append(list(main_data = flat_data), after = 0)
+
+    # if the user entered the datasets parameter
+    if (!is.null(datasets)) {
+
+        # if all of the dataset names the user entered are
+        # valid
+        if (all(datasets %in% names(out))) {
+
+            # if the user did not select to include all of
+            # the main data
+            if (!"main_data" %in% datasets) {
+
+                # get the ids parkCodes and name/fullName
+                # from the main data
+                all_ids <- out$main_data %>%
+                  select(id, parkCode, matches("fullName|name"))
+
+                # subset the data to just the datasets the
+                # user selected
+                out <- out[datasets] %>%
+                  # prepend all of the ids to the list of
+                  # dataframes selected
+                append(list(all_ids = all_ids), after = 0)
+
+                # subset the data to just the datasets the
+                # user selected
+            } else {
+                out <- out[datasets]
+            }
         } else {
-            #throw an error and output a helpful message
+            # throw an error and output a helpful message
             stop("Please enter valid dataset(s)")
         }
-        
-        
-       
+
     }
-    
-     #if the user selects the output to be a tibble left join the datasets together on the parkcode
-    if(output_tibble) {
-        
+
+    # if the user selects the output to be a tibble left
+    # join the datasets together on the parkcode
+    if (output_tibble) {
+
         out <- out %>%
-            reduce(left_join, by = 'id')
+            reduce(left_join, by = "id")
     }
-    
-    #return data
+
+    # return data
     return(out)
-    
+
 }
 ```
 
@@ -314,48 +334,51 @@ enter an endpoint parameter. The user can also enter the state and/or
 the park code desired.
 
 ``` r
-get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, endpoint = 'campgrounds', ...) { 
-    
-    #start with a base url of the api call and add the endpoint
-    url <-  paste0('https://developer.nps.gov/api/v1/', endpoint, '?')
-    
-    #if the user enters a state name or code
-    if(!is.null(state)) {
-        
-        #get the state code
+get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key,
+    endpoint = "campgrounds", ...) {
+
+    # start with a base url of the api call and add the
+    # endpoint
+    url <- paste0("https://developer.nps.gov/api/v1/", endpoint,
+        "?")
+
+    # if the user enters a state name or code
+    if (!is.null(state)) {
+
+        # get the state code
         state_code <- get_state_codes(state)
-        
-        #add the state code parameter to the url
-        url <- paste0(url,'&stateCode=', state_code)
-    
+
+        # add the state code parameter to the url
+        url <- paste0(url, "&stateCode=", state_code)
+
     }
-    
-    #if user enters a park code
-    if(!is.null(park_code)) {
-        
-        #add the park_code to the url
-       url <- paste0(url,'&parkCode=', park_code) 
+
+    # if user enters a park code
+    if (!is.null(park_code)) {
+
+        # add the park_code to the url
+        url <- paste0(url, "&parkCode=", park_code)
     }
-    
-    #add the api key to the url
-    url <- paste0(url,'&api_key=', my_api_key)
-   
-    #get the maximum restuls from the api
+
+    # add the api key to the url
+    url <- paste0(url, "&api_key=", my_api_key)
+
+    # get the maximum restuls from the api
     res <- get_max_results(url)
-    
-    #extract the content from the JSON object
+
+    # extract the content from the JSON object
     content <- fromJSON(rawToChar(res$content))
-    
-    #extract the data
+
+    # extract the data
     dat <- content$data
-    
-    #get the data into a list of dataframes or a single tibble based on user selection
+
+    # get the data into a list of dataframes or a single
+    # tibble based on user selection
     out <- rectangle_data(dat, ...)
-    
-    
-    #return data
+
+    # return data
     return(out)
-    
+
 }
 ```
 
@@ -372,30 +395,32 @@ Carolina. It looks like Great Smoky Mountains National Park has the most
 developed campgrounds.
 
 ``` r
-#What types of parks do our National Parks have?
-campground_classifications <- get_park_info(endpoint = 'campgrounds',
-                                            datasets = 'accessibility.classifications',
-                                             output_tibble = TRUE) %>%
-    mutate(classification = replace_na(accessibility.classifications, 'Not Classified'))
+# What types of parks do our National Parks have?
+campground_classifications <- get_park_info(endpoint = "campgrounds",
+    datasets = "accessibility.classifications", output_tibble = TRUE) %>%
+    mutate(classification = replace_na(accessibility.classifications,
+        "Not Classified"))
 
-#get all of the park codes and names
+# get all of the park codes and names
 park_names <- get_park_codes()
-#get just the NC parks
-nc_parks <- get_park_codes(state = 'NC')
+# get just the NC parks
+nc_parks <- get_park_codes(state = "NC")
 
-#get a contingency table of campground classifications by park
+# get a contingency table of campground classifications by
+# park
 park_classifications <- park_names %>%
-    inner_join(campground_classifications, by = 'parkCode') %>%
+    inner_join(campground_classifications, by = "parkCode") %>%
     select(fullName, classification) %>%
     table() %>%
     as.data.frame() %>%
     pivot_wider(names_from = classification, values_from = Freq) %>%
     arrange(-`Developed Campground`) %>%
-    inner_join(nc_parks, by = 'fullName') %>%
-    rename('Park' = fullName)
-    
+    inner_join(nc_parks, by = "fullName") %>%
+    rename(Park = fullName)
 
-knitr::kable(park_classifications %>% select(-parkCode))
+
+knitr::kable(park_classifications %>%
+    select(-parkCode))
 ```
 
 <table>
@@ -517,23 +542,24 @@ There are 13 campgrounds however that have access to both cell phone
 reception and internet year round.
 
 ``` r
-#internet connectivity and cellphone reception
-campgrounds <- get_park_info(endpoint = 'campgrounds',
-                             datasets = c('main_data'), 
-                             output_tibble = TRUE) %>%
-    inner_join(park_names, by = 'parkCode') %>%
+# internet connectivity and cellphone reception
+campgrounds <- get_park_info(endpoint = "campgrounds", datasets = c("main_data"),
+    output_tibble = TRUE) %>%
+    inner_join(park_names, by = "parkCode") %>%
     rename(Park = fullName, Campground = name)
 
-#get a contingency table of internet and phone connectivity
+# get a contingency table of internet and phone
+# connectivity
 internet_and_phone <- campgrounds %>%
     select(amenities.internetConnectivity, amenities.cellPhoneReception) %>%
-    filter(amenities.internetConnectivity != '' & amenities.cellPhoneReception != '') %>%
+    filter(amenities.internetConnectivity != "" & amenities.cellPhoneReception !=
+        "") %>%
     table()
 
 
 
 knitr::kable(internet_and_phone) %>%
-    add_header_above(header = c("Internet" = 1, "Cell Reception" = 3))
+    add_header_above(header = c(Internet = 1, `Cell Reception` = 3))
 ```
 
 <table>
@@ -627,29 +653,29 @@ you’re not much of a planner and you don’t want to reserve a spot in
 advance the Blue Ridge Parkway is your best bet.
 
 ``` r
-#get northcarolina campground information by calling our api function
-campgrounds_NC <- get_park_info(state = 'NC',
-                             endpoint = 'campgrounds',
-                             datasets = c('main_data'), 
-                             output_tibble = TRUE) %>%
-    inner_join(park_names, by = 'parkCode') %>%
+# get northcarolina campground information by calling our
+# api function
+campgrounds_NC <- get_park_info(state = "NC", endpoint = "campgrounds",
+    datasets = c("main_data"), output_tibble = TRUE) %>%
+    inner_join(park_names, by = "parkCode") %>%
     rename(Park = fullName, Campground = name)
 
-#pivot the data to counts of campsites by walkup vs reservable
+# pivot the data to counts of campsites by walkup vs
+# reservable
 campsites <- campgrounds_NC %>%
     select(Park, Campground, numberOfSitesReservable, numberOfSitesFirstComeFirstServe) %>%
-    mutate(reservable = as.numeric(numberOfSitesReservable), 
-           walkup = as.numeric(numberOfSitesFirstComeFirstServe),
-           .keep = 'unused') %>%
-    pivot_longer(cols = c(reservable, walkup), names_to = 'site_type', values_to = 'campsites')
+    mutate(reservable = as.numeric(numberOfSitesReservable),
+        walkup = as.numeric(numberOfSitesFirstComeFirstServe),
+        .keep = "unused") %>%
+    pivot_longer(cols = c(reservable, walkup), names_to = "site_type",
+        values_to = "campsites")
 
-#barplot of campsites reservability
+# barplot of campsites reservability
 ggplot(data = campsites, aes(x = Park, y = campsites, fill = site_type)) +
-    geom_bar(position = 'stack', stat = 'identity', alpha = .7) +
-    scale_x_discrete(guide = guide_axis(angle = 30)) +
-    scale_fill_discrete(name = "") +
-    theme_minimal() +
-    labs(x = NULL, title = 'Number of Campsites by Reservability', subtitle = 'National Parks of North Carolina') 
+    geom_bar(position = "stack", stat = "identity", alpha = 0.7) +
+    scale_x_discrete(guide = guide_axis(angle = 30)) + scale_fill_discrete(name = "") +
+    theme_minimal() + labs(x = NULL, title = "Number of Campsites by Reservability",
+    subtitle = "National Parks of North Carolina")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
@@ -663,23 +689,22 @@ campsites. The largest campground has 211 sites, but the spread is quite
 wide and the smallest only has 1.
 
 ``` r
-#Create numeric summaries of the number of campsites at each campground in NC parks
+# Create numeric summaries of the number of campsites at
+# each campground in NC parks
 total_campsites <- campgrounds %>%
     select(Park, parkCode, Campground, total_sites = campsites.totalSites) %>%
     mutate(total_sites = as.numeric(total_sites)) %>%
     group_by(Park, parkCode) %>%
     filter(total_sites > 0) %>%
-    summarise('Total Campsites' = sum(total_sites), 
-              'Average Sites per Campground' = mean(total_sites), 
-              'Sites at Smallest Campground' = min(total_sites),
-              'Sites at Largest Campground' = max(total_sites),
-              'Std Dev' = sd(total_sites)
-              ) %>%
+    summarise(`Total Campsites` = sum(total_sites), `Average Sites per Campground` = mean(total_sites),
+        `Sites at Smallest Campground` = min(total_sites), `Sites at Largest Campground` = max(total_sites),
+        `Std Dev` = sd(total_sites)) %>%
     ungroup() %>%
     arrange(-`Total Campsites`) %>%
-    inner_join(nc_parks, by = c('Park' = 'fullName', 'parkCode'))
+    inner_join(nc_parks, by = c(Park = "fullName", "parkCode"))
 
-kable(total_campsites %>% select(-parkCode))
+kable(total_campsites %>%
+    select(-parkCode))
 ```
 
 <table>
@@ -801,28 +826,27 @@ they do not allow us to easily see which campsites are cabins
 vs. primitive sites in a nice graphical display.
 
 ``` r
-#campground_fees
+# campground_fees
 
-campground_fees <- get_park_info(endpoint = 'campgrounds', 
-                                          datasets = c('fees'),
-                                          output_tibble = TRUE) %>%
-    inner_join(campgrounds, by = c('id', 'parkCode')) %>%
+campground_fees <- get_park_info(endpoint = "campgrounds", datasets = c("fees"),
+    output_tibble = TRUE) %>%
+    inner_join(campgrounds, by = c("id", "parkCode")) %>%
     select(Park, parkCode, Campground, feescost) %>%
     mutate(cost = as.numeric(feescost)) %>%
     filter(!is.na(cost))
-    
-    
+
+
 fee_summaries <- campground_fees %>%
     group_by(Park, parkCode) %>%
-    summarise('Median Campsite Fee' = round(median(cost), digits = 2),
-              'Lowest Campsite Fee' = min(cost),
-              'Highest Campsite Fee' = max(cost),
-              'Std Dev' = sd(cost)) %>%
+    summarise(`Median Campsite Fee` = round(median(cost), digits = 2),
+        `Lowest Campsite Fee` = min(cost), `Highest Campsite Fee` = max(cost),
+        `Std Dev` = sd(cost)) %>%
     ungroup() %>%
     arrange(-`Median Campsite Fee`) %>%
-    inner_join(nc_parks, by = c('Park' = 'fullName', 'parkCode'))
+    inner_join(nc_parks, by = c(Park = "fullName", "parkCode"))
 
-kable(fee_summaries %>% select(-parkCode))
+kable(fee_summaries %>%
+    select(-parkCode))
 ```
 
 <table>
@@ -921,14 +945,13 @@ We can also see the distribution of cost across North Carolina Parks
 visually in a boxplot.
 
 ``` r
-#how to NC Campgrounds fare in terms of fees
+# how to NC Campgrounds fare in terms of fees
 
 nc_fees <- campground_fees %>%
-    semi_join(nc_parks, by = 'parkCode')
+    semi_join(nc_parks, by = "parkCode")
 
-ggplot(data = nc_fees, aes(y = cost, fill = Park)) +
-    geom_boxplot(alpha = .5) +
-    labs(title = 'Cost Distributions of Campgrounds')
+ggplot(data = nc_fees, aes(y = cost, fill = Park)) + geom_boxplot(alpha = 0.5) +
+    labs(title = "Cost Distributions of Campgrounds")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
@@ -940,9 +963,8 @@ are very affordable. There are however some outliers ranging all the way
 up to \$1000!
 
 ``` r
-#histogram
-ggplot(data = campground_fees, aes(x = cost)) +
-    geom_histogram(bins = 50)
+# histogram
+ggplot(data = campground_fees, aes(x = cost)) + geom_histogram(bins = 50)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
@@ -956,15 +978,18 @@ designation tend to be on the lower end of cost, while developed
 campgrounds tend to be more expensive.
 
 ``` r
-#get each Campground's lowest cost campsite and the total number of campsites
+# get each Campground's lowest cost campsite and the total
+# number of campsites
 sites_and_fees <- campground_fees %>%
-    inner_join(campground_classifications, by = c('parkCode', 'Campground' = 'name')) 
+    inner_join(campground_classifications, by = c("parkCode",
+        Campground = "name"))
 
-#plot the cost distributions across the types of campgrounds
-ggplot(data = sites_and_fees, aes(x = cost, y = classification, fill = classification)) +
-    geom_density_ridges(show.legend = FALSE, alpha = .5) +
-    xlim(0,200) +
-    labs(y = NULL, title = 'Cost Distributions of Campground Classifications', subtitle = 'US National Parks')
+# plot the cost distributions across the types of
+# campgrounds
+ggplot(data = sites_and_fees, aes(x = cost, y = classification,
+    fill = classification)) + geom_density_ridges(show.legend = FALSE,
+    alpha = 0.5) + xlim(0, 200) + labs(y = NULL, title = "Cost Distributions of Campground Classifications",
+    subtitle = "US National Parks")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
@@ -978,29 +1003,32 @@ National Park not only has the most campgrounds, but also the widest
 range of activities available.
 
 ``` r
-#get park activities
-activities <- get_park_info(endpoint = 'parks', datasets = 'activities', output_tibble = TRUE)
+# get park activities
+activities <- get_park_info(endpoint = "parks", datasets = "activities",
+    output_tibble = TRUE)
 
-#summarise the number of campgrounds
+# summarise the number of campgrounds
 n_campgrounds_nc <- campgrounds_NC %>%
     select(Park, Campground) %>%
     group_by(Park) %>%
     summarise(Campgrounds = n_distinct(Campground))
 
-#summarise the number of activities and join to number of campgrounds
+# summarise the number of activities and join to number of
+# campgrounds
 activites_nc <- activities %>%
-    inner_join(nc_parks, by = c('parkCode', 'fullName')) %>%
+    inner_join(nc_parks, by = c("parkCode", "fullName")) %>%
     rename(Park = fullName, Activity = activitiesname) %>%
     group_by(Park) %>%
     summarise(Activities = n_distinct(Activity)) %>%
-    inner_join(n_campgrounds_nc, by = 'Park') %>%
-    pivot_longer(cols = c('Activities', 'Campgrounds'))
+    inner_join(n_campgrounds_nc, by = "Park") %>%
+    pivot_longer(cols = c("Activities", "Campgrounds"))
 
-#barplot
+# barplot
 ggplot(data = activites_nc, aes(x = value, y = Park, fill = name)) +
-    geom_bar(stat = 'identity', position = 'dodge', alpha = .7) +
-     scale_fill_discrete(name = "") +
-    labs(title = 'Number of Activities and Campgrounds', subtitle = 'National Parks of North Carolina', x = 'Count', y = NULL)
+    geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
+    scale_fill_discrete(name = "") + labs(title = "Number of Activities and Campgrounds",
+    subtitle = "National Parks of North Carolina", x = "Count",
+    y = NULL)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
