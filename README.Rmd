@@ -1,7 +1,8 @@
 ---
 title: "Reading Data from APIs"
 output: github_document
-    theme: flatly
+always_allow_html: true
+df_print: paged
 ---
 
 ```{r setup, include=FALSE, warning = FALSE, message = FALSE}
@@ -11,9 +12,10 @@ library(tidyverse)
 library(httr)
 library(jsonlite)
 library(ggplot2)
-library(tidyjson)
-library(plotly)
 library(DT)
+library(ggridges)
+library(epitab)
+library(kableExtra)
 
 ```
 
@@ -165,21 +167,6 @@ Once our data has been returned from the API and parsed we will need a little ex
 
 ```{r}
 
-df <- out[[2]] %>%
-    
-new_df <- handle_list_columns('amenities.toilets', df) 
-    
-
-    mutate_at(amenities.toilets, ~map(., select, -matches('id')))
-    
-    select(id, amenities.toilets) %>%
-    filter(lengths(amenities.toilets) != 0) %>%
-
-column_names <- out[[1]] 
-
-test <- column_names %>%
-    map(handle_list_columns, df)
-
 handle_list_columns <- function(list_column, .data) {
     
     #ensym the list_column parameter so that it may be passed in the functions
@@ -196,7 +183,6 @@ handle_list_columns <- function(list_column, .data) {
    #return the data
    return(out)
 }
-
 
 ```
 
@@ -350,165 +336,7 @@ get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, 
 
 ```
 
-The next two API endpoints I wanted to explore are related to amenities of the parks. There is "amenities/parksplaces" which provides information about the amenities of places within each park, and "amenities/parksvisitorcenters" which provides information about the amenities of the park visitor centers. This endpoint allows search terms such as "wheelchair access" or "accessibility"
-
-```{r}
-
-park_data <- get_park_info( endpoint = 'campgrounds', output_tibble = TRUE, datasets = 'fees')
-
-
-all(c('topics','amenities') %in% names(park_data))
-
-test <- park_data[datas]
-
-call <- GET(paste0('https://developer.nps.gov/api/v1/campgrounds?', '&api_key=', my_api_key))
-           
-
-content <- fromJSON(rawToChar(call$content))
-
-dat <- content$data
-
-
-
-
-
-    
-    
-    
-    
-    mutate(activities = map(activities, ~select(.,-id)) %>% 
-    
-
-test <- as.list(list_cols) %>%
-    set_names(list_cols) %>%
-    map(handle_list_columns, lists) %>%
-    discard(~nrow(.x) == 0)
-
-test <- handle_list_columns(fees, lists)
-
-
-fees <- lists %>%
-    select(id,fees) %>%
-    filter(lengths(fees) != 0) %>%
-    unnest(fees)
-
-operating_hours <- lists %>%
-    select(id,operatingHours) %>%
-    filter(lengths(operatingHours) != 0) %>%
-    unnest(operatingHours)
-    
-exceptions <- operating_hours %>%
-    select(id, exceptions) %>%
-    filter(lengths(exceptions) != 0) %>%
-    unnest(exceptions)
-
-
-amenties <- lists %>%
-    select(id, amenities.potableWater) %>%
-    filter(lengths(amenities.potableWater) != 0) %>%
-    unnest(amenities.potableWater)
-
-    
-    map(enframe) %>%
-    map(unnest) %>%
-    map(class)
-    enframe() %>%
-    unnest() %>%
-    
-    select_if(is.character)
-
-not_flat_data <- dat %>%
-    flatten() %>%
-    select_if(negate(is.character)) %>%
-    map(enframe) %>%
-    map(unnest) %>%
-    map(select, -name) %>%
-    map_at('operatingHours', flatten)
-
-test <- fromJSON(rawToChar(park_data$content))$data
-
-test_3 <-
-
-test_2 <- fromJSON(rawToChar(park_data$content), flatten = FALSE)$data %>%
-    select_if(is.data.frame)
-
-setdiff(names(test_2), names(test))
-
-identical(test$data,test_2$data)
-
-test_spread <- test %>%  
-    enter_object(data) %>% 
-    gather_array() %>% 
-    spread_all() %>%
-    select(id,url,fullName,parkCode,description,latitude,latLong,states,directionsInfo,weatherInfo,name,designation)
-
-data <- test_spread %>%
-    select()
- 
-test_JSON <- test_spread$..JSON[[1]]$data
-
-campground_data <- get_park_info( output_tibble = FALSE)
-
-park_data <- get_park_info(endpoint = 'parks', output_tibble = FALSE) 
-
-park_names <- park_data$data %>%
-    select(parkCode, fullName)
-
-campsites <- campground_data$data %>%
-    select(name, parkCode, numberOfSitesReservable, numberOfSitesFirstComeFirstServe) %>%
-    mutate_at(vars(numberOfSitesReservable, numberOfSitesFirstComeFirstServe), as.numeric) %>%
-    group_by(name, parkCode) %>%
-    pivot_longer(cols = matches('Sites'), names_to = 'site_type', values_to = 'campsites') %>%
-    mutate(site_type = str_remove_all(site_type, 'numberOfSites')) %>%
-    inner_join(park_names, by = 'parkCode')
-    
-    
-
-x <- as.factor(c('a','b','b','c','f'))
-
-x[4] <- 'd'
-
-#which park has more walkup sites
-ggplot(data = campsites, aes(x = fullName, y = campsites, fill = site_type)) +
-    geom_bar(position = 'stack', stat = 'identity') +
-    scale_x_discrete(guide = guide_axis(angle = 30)) +
-    scale_fill_discrete(name = "") +
-    theme_minimal() +
-    labs(x = NULL, title = 'Number of Campsites by Reservability', subtitle = 'National Parks of North Carolina') 
-    
-    
-    
-    facet_wrap(~fullName, scales = 'free') +
-
-
-campgrounds_by_park <- park_data$data %>%
-        select(parkCode, fullName) %>%
-        left_join(campground_data %>% 
-                      select(parkCode, name) %>%
-                      , by = 'parkCode')
-
-        
-activities_by_park <- park_data$data %>%
-        select(parkCode, fullName) %>%
-        left_join(park_data$activities , by = 'parkCode') %>%
-        select(fullName, activity = activities_activities_name) %>%
-        distinct() %>%
-        mutate(dummy = 1) %>%
-        group_by(activity) %>%
-        pivot_wider(names_from = fullName, values_from = dummy, values_fill = 0)
-    
-
-    
-```
-
-
-lets test out our function: 
-
-```{r}
-
-test <- get_park_info(state = 'North Carolina', datasets = c('activities', 'entranceFees'), output_tibble = FALSE)
-
-```
+### Data Exploration
 
 ### Contingency Tables
 
@@ -520,9 +348,10 @@ campground_classifications <- get_park_info(endpoint = 'campgrounds',
                                              output_tibble = TRUE) %>%
     mutate(classification = replace_na(accessibility.classifications, 'Not Classified'))
 
-
+#get all of the park codes and names
 park_names <- get_park_codes()
 
+#get a contingency table of campground classifications by park
 park_classifications <- park_names %>%
     inner_join(campground_classifications, by = 'parkCode') %>%
     select(fullName, classification) %>%
@@ -544,307 +373,175 @@ datatable(park_classifications)
 campgrounds <- get_park_info(endpoint = 'campgrounds',
                              datasets = c('main_data'), 
                              output_tibble = TRUE) %>%
-    inner_join(park_names, by = 'parkCode') 
+    inner_join(park_names, by = 'parkCode') %>%
+    rename(Park = fullName, Campground = name)
 
+#get a contingency table of internet and phone connectivity
 internet_and_phone <- campgrounds %>%
     select(amenities.internetConnectivity, amenities.cellPhoneReception) %>%
     filter(amenities.internetConnectivity != '' & amenities.cellPhoneReception != '') %>%
     table()
 
-knitr::kable(internet_and_phone)
 
+
+knitr::kable(internet_and_phone) %>%
+    add_header_above(header = c("Internet" = 1, "Cell Reception" = 3))
+
+
+
+
+```
+
+## Barplot
+
+```{r}
+campgrounds_NC <- get_park_info(state = 'NC',
+                             endpoint = 'campgrounds',
+                             datasets = c('main_data'), 
+                             output_tibble = TRUE) %>%
+    inner_join(park_names, by = 'parkCode') %>%
+    rename(Park = fullName, Campground = name)
+
+campsites <- campgrounds_NC %>%
+    select(Park, Campground, numberOfSitesReservable, numberOfSitesFirstComeFirstServe) %>%
+    mutate(reservable = as.numeric(numberOfSitesReservable), 
+           walkup = as.numeric(numberOfSitesFirstComeFirstServe),
+           .keep = 'unused') %>%
+    pivot_longer(cols = c(reservable, walkup), names_to = 'site_type', values_to = 'campsites')
+
+
+ggplot(data = campsites, aes(x = Park, y = campsites, fill = site_type)) +
+    geom_bar(position = 'stack', stat = 'identity', alpha = .7) +
+    scale_x_discrete(guide = guide_axis(angle = 30)) +
+    scale_fill_discrete(name = "") +
+    theme_minimal() +
+    labs(x = NULL, title = 'Number of Campsites by Reservability', subtitle = 'National Parks of North Carolina') 
+
+```
+ 
+## Numeric Summaries
+
+```{r}
+
+#Total Campsites
+
+total_campsites <- campgrounds %>%
+    select(Park, parkCode, Campground, total_sites = campsites.totalSites) %>%
+    mutate(total_sites = as.numeric(total_sites)) %>%
+    group_by(Park, parkCode) %>%
+    filter(total_sites > 0) %>%
+    summarise('Total Campsites' = sum(total_sites), 
+              'Average Sites per Campground' = mean(total_sites), 
+              'Sites at Smallest Campground' = min(total_sites),
+              'Sites at Largest Campground' = max(total_sites),
+              'Std Dev' = sd(total_sites)
+              ) %>%
+    ungroup() %>%
+    arrange(-`Total Campsites`)
+
+datatable(total_campsites %>% select(-parkCode))
+    
 
 ```
 
 
 ```{r}
-campgrounds_per_park <- campgrounds %>%
-    group_by(fullName) %>%
-    summarise(campgrounds = n_distinct(name))
-
-
-knitr::kable(campgrounds_per_park %>% 
-                 arrange(-campgrounds),
-             col.names = c('Park', 'Number of Campgrounds')
-             )
-
-```
-
-
-```{r}
-#avg fee vs total sites
+#campground_fees
 
 campground_fees <- get_park_info(endpoint = 'campgrounds', 
                                           datasets = c('fees'),
-                                          output_tibble = TRUE)
-
-
-campground_sites <- get_park_info(endpoint = 'campgrounds', 
-                                  datasets = c('main_data'), 
-                                  output_tibble = TRUE)
-
-sites_per_campground <- campground_sites %>%
-    mutate(reservable = as.numeric(numberOfSitesReservable), 
-           walkup = as.numeric(numberOfSitesFirstComeFirstServe),
-           total_sites = as.numeric(campsites.totalSites)) %>%
-    select(id, parkCode, name, reservable, walkup, total_sites)
-
-sites_and_fees <- sites_per_campground %>%
-    inner_join(campground_fees, by = c('id', 'parkCode', 'name'))
+                                          output_tibble = TRUE) %>%
+    inner_join(campgrounds, by = c('id', 'parkCode')) %>%
+    select(Park, parkCode, Campground, feescost) %>%
+    mutate(cost = as.numeric(feescost)) %>%
+    filter(!is.na(cost))
     
+    
+fee_summaries <- campground_fees %>%
+    group_by(Park, parkCode) %>%
+    summarise('Median Campsite Fee' = round(median(cost), digits = 2),
+              'Lowest Campsite Fee' = min(cost),
+              'Highest Campsite Fee' = max(cost),
+              'Std Dev' = sd(cost)) %>%
+    ungroup() %>%
+    arrange(-`Median Campsite Fee`)
 
-
-ggplotly(sites_and_fees_plot )
+datatable(fee_summaries %>% select(-parkCode))
 
 ```
 
+### Histogram
+
+```{r}
+
+#histogram
+ggplot(data = campground_fees, aes(x = cost)) +
+    geom_histogram(bins = 50)
+    
+```
 
 
 ### Box Plot
 
 ```{r}
 
-campground_fee_data <- get_park_info(datasets = 'fees', endpoint = 'campgrounds')
+#how to NC Campgrounds fare in terms of fees
+nc_parks <- get_park_codes(state = 'NC')
 
-fees <- campground_data$fees %>%
-    select(parkCode, cost = fees_fees_cost) %>%
-    inner_join(park_data$data %>% select(fullName, parkCode)) %>%
-    mutate(cost = as.numeric(cost)) 
+nc_fees <- campground_fees %>%
+    semi_join(nc_parks, by = 'parkCode')
 
-ggplot(data = fees, aes(x = cost)) +
-    geom_histogram()
-
-ggplot(data = fees, aes(y = cost, fill = fullName)) +
-    geom_boxplot()
+ggplot(data = nc_fees, aes(y = cost, fill = Park)) +
+    geom_boxplot(alpha = .5) +
+    labs(title = 'Cost Distributions of Campgrounds')
 
 
 
 ```
 
-
-#### Contingency Tables
-
-Which parks have the most amenities
+## Scatter Plot
 
 ```{r}
 
-campground_data <- get_park_info(endpoint = 'campgrounds', datasets = c('accessibility', 'fees'), output_tibble = TRUE)
+#get each Campground's lowest cost campsite and the total number of campsites
+sites_and_fees <- campground_fees %>%
+    inner_join(campground_classifications, by = c('parkCode', 'Campground' = 'name')) 
 
+#plot the cost distributions across the types of campgrounds
+ggplot(data = sites_and_fees, aes(x = cost, y = classification, fill = classification)) +
+    geom_density_ridges(show.legend = FALSE, alpha = .5) +
+    xlim(0,200) +
+    labs(y = NULL, title = 'Cost Distributions of Campground Classifications')
 
-campground_data %>%
-    select(matches('wheelchair')) %>%
-    rename('wheelchairAccess') %>%
-    distinct()
-
-amenities <- get_max_results(paste0("https://developer.nps.gov/api/v1/amenities/parksplaces?",'&api_key=', my_api_key))
-amenities_visitor_center <- get_max_results(paste0("https://developer.nps.gov/api/v1/amenities/parksvisitorcenters?",'&api_key=', my_api_key))
-
-parsed_amenities <- amenities_visitor_center$data %>%
-    map(pluck, 'parks') %>%
-    map(as.data.frame) %>%
-    set_names(parsed_amenity_names) %>%
-    compact() %>%
-    map(unnest, visitorcenters, names_sep = '_') %>%
-    map(select, states, parkCode, fullName, visitorcenters_name) %>%
-    enframe() %>%
-    unnest(value) %>% 
-    separate_rows(states) %>%
-    group_by(parkCode, fullName, name) %>%
-    summarise(n_visitorcenters = n_distinct(visitorcenters_name), n_states = n_distinct(states)) %>%
-    ungroup() %>%
-    group_by(parkCode, fullName, n_states) %>%
-    pivot_wider(names_from = name, values_from = n_visitorcenters, values_fn = sum, values_fill = 0) %>%
-    ungroup()
-
-
-test_rooms <- parsed_amenities %>%
-    filter(str_detect(name, 'Restroom')) %>%
-    filter(str_detect(fullName, 'Blue Ridge'))
-    
-restrooms <- parsed_amenities %>%
-    select(parkCode, fullName, matches('Restroom')) %>%
-    filter(Restroom > 0) %>%
-    mutate(accessibility_ratio = `Restroom - Accessible`/Restroom)
-
-parsed_amenities$n_states
-
-parsed_amenities %>%
-    group_by(parkCode, fullName)
-    
-    
-    
-    map(separate_rows, states) %>%
-    map(distinct) %>%
-    map(group_by, parkCode, fullName) %>%
-    map(summarise, n_places = n_distinct(places_title), n_states = n_distinct(states)) 
-
-parkCode, fullName, places_title, amenity_name, states
-
-
-test <- parsed_amenities$`Restroom` %>%
-    select(states, parkCode, fullName, places_title) %>%
-    separate_rows(states) %>%
-    distinct() %>%
-    group_by(parkCode, fullName) %>%
-    summarise(n_places = n_distinct(places_title), n_states = n_distinct(states))
-
-test <- parsed_amenities$`Restroom` %>%
-    select(states, parkCode, fullName, places_title) %>%
-    separate_rows(states) %>%
-    distinct() %>%
-    group_by(parkCode, fullName) %>%
-    summarise(n_places = n_distinct(places_title), n_states = n_distinct(states))
 
 ```
 
-
-#### Numerical Summaries
-
-#### Plots
-
-
+### Activities
 
 ```{r}
 
+activities <- get_park_info(endpoint = 'parks', datasets = 'activities', output_tibble = TRUE)
 
+n_campgrounds_nc <- campgrounds_NC %>%
+    select(Park, Campground) %>%
+    group_by(Park) %>%
+    summarise(Campgrounds = n_distinct(Campground))
 
-what <- test %>%
-    discard(is.list)
+activites_nc <- activities %>%
+    inner_join(nc_parks, by = c('parkCode', 'fullName')) %>%
+    rename(Park = fullName, Activity = activitiesname) %>%
+    group_by(Park) %>%
+    summarise(Activities = n_distinct(Activity)) %>%
+    inner_join(n_campgrounds_nc, by = 'Park') %>%
+    pivot_longer(cols = c('Activities', 'Campgrounds'))
 
-test <- get_park_info(state = 'MI')
-
-#get the names of each of the list columns
-list_col_names <- test %>%
-    map(class) %>%
-    keep(has_element, 'list') %>%
-    names()
-
-col_name <- 'operatingHours'
-
-this <- test %>%
-    select(fees)
-
-
-this <- test %>%
+ggplot(data = activites_nc, aes(x = value, y = Park, fill = name)) +
+    geom_bar(stat = 'identity', position = 'dodge', alpha = .7) +
+     scale_fill_discrete(name = "") +
+    labs(title = 'Number of Activities and Campgrounds', subtitle = 'National Parks of North Carolina', x = 'Count', y = NULL)
     
-    
-this <- test %>%
-    unnest(cols = these)
-    
-    
-
-new <- test %>%
-    select(parkCode, all_of(col_name)) %>%
-    unnest(col_name) %>%
-    select(-matches('id|exceptions')) %>%
-    rename_at(vars(-parkCode), ~paste0(col_name, '_', .)) %>%
-    flatten()
-
-
-
-    unnest_longer('activities') %>%
-    unnest_longer('topics') %>%
-    unnest_longer('entranceFees') %>%
-    unnest_longer('entrancePasses') %>%
-    unnest_longer('operatingHours') %>%
-    unnest_longer('operatingHours')
-
-new <- test %>%
-    select(parkCode, fees)
-
-```
-
-Now let's test out our function:
-
-```{r}
-
-test <- get_park_info(state = 'michigan')
-
-test <- get_parks(state = 'nc')
-
-as.numeric(test$limit) < as.numeric(test$total)
-
-test <- GET(api_url) 
-
-test_again <- fromJSON(rawToChar(test$content))
-
-
-visitation <- GET('https://irma.nps.gov/Stats/SSRSReports/National%20Reports/Query%20Builder%20for%20Public%20Use%20Statistics%20(1979%20-%20Last%20Calendar%20Year)')
-
-visits <-rawToChar(visitation$content)
-
-javascript:void(0)
 
 ```
 
 
-
-
-```{r scratchpad, echo = FALSE, eval = FALSE}
-state.name
-state.abb
-
-campgrounds <- GET("https://developer.nps.gov/api/v1/campgrounds?stateCode=NC&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
-
-alerts <- GET("https://developer.nps.gov/api/v1/alerts?api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
-
-test <- fromJSON(rawToChar(alerts$content))
-
-parsed_campgrounds <- fromJSON(rawToChar(campgrounds$content)) %>%
-    unnest(amenities, names_sep = '_') %>%
-    unnest(fees, names_sep = '_') %>%
-    unnest(passportStampImages, names_sep = '_')
-
-amenities <- parsed_campgrounds$amenities
-    
-?unnest    
-
-activities <- GET("https://developer.nps.gov/api/v1/activities/parks?limit=100&api_key=iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf")
-
-activities$content
-
-parsed_activities <- fromJSON(rawToChar(activities$content))
-
-combined_activities <- parsed_activities$data %>%
-    rename('activity' = name) %>%
-    unnest(parks)
-
-activities_with_campgrounds <- parsed_campgrounds %>%
-    inner_join(combined_activities, by = park_code)
-
-
-
-```
-
-
-
-
-
-
-
-
-```{r}
-
-
-visitation_data <- read_csv('Public Use Statistics (1979 - Last Calendar Year).csv')
-
-```
-
-
-## Exploratory Analysis
-
-```{r}
-#EDA Requirements (A few requirements about your EDA are below:
-#∗ You should pull data from at least two separate calls to your API functions
-#∗ You should create some contingency tables
-#∗ You should create numerical summaries for some quantitative variables at each setting of some
-#of your categorical variables
-#∗ You should create at least five plots utilizing coloring, grouping, etc. All plots should have
-#nice labels and titles.
-#· At least one plot that you create should be a plot that we didn’t cover in class (say a
-#heatmap or something like that - lots of good examples to consider here https://exts.
-#ggplot2.tidyverse.org/gallery/))
-
-
-```
 
