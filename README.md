@@ -39,12 +39,12 @@ The first is a helper function `get_state_codes`. For some of the API
 endpoints the National Parks Service allows the user to enter the two
 character state abbreviation. In our final API function we want to be a
 bit more flexible and allow the user to be able to enter the name of a
-state, the two digit state code, or two leave the state parameter blank
-(the default will be null) to return all states. The `get_state_codes`
+state, the two digit state code, or leave the state parameter blank (the
+default will be null) to return all states. The `get_state_codes`
 function takes one parameter which is either the name of a state, the
-state abbreviation, and either returns a corresponding state abbrevation
-or ensures that the state abbreviation entered is valid. It uses the
-built in R datasets
+state abbreviation, and either returns a corresponding state
+abbreviation or ensures that the state abbreviation entered is valid. It
+uses the built in R datasets
 [state.abb](https://www.rdocumentation.org/packages/datasets/versions/3.6.2/topics/state)
 and
 [state.name](https://www.rdocumentation.org/packages/datasets/versions/3.6.2/topics/state).
