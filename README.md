@@ -652,7 +652,7 @@ ggplot(data = campsites, aes(x = Park, y = campsites, fill = site_type)) +
     labs(x = NULL, title = 'Number of Campsites by Reservability', subtitle = 'National Parks of North Carolina') 
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-55-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 #### Campsite Numbers
 
@@ -678,11 +678,7 @@ total_campsites <- campgrounds %>%
     ungroup() %>%
     arrange(-`Total Campsites`) %>%
     inner_join(nc_parks, by = c('Park' = 'fullName', 'parkCode'))
-```
 
-    ## `summarise()` has grouped output by 'Park'. You can override using the `.groups` argument.
-
-``` r
 kable(total_campsites %>% select(-parkCode))
 ```
 
@@ -825,11 +821,7 @@ fee_summaries <- campground_fees %>%
     ungroup() %>%
     arrange(-`Median Campsite Fee`) %>%
     inner_join(nc_parks, by = c('Park' = 'fullName', 'parkCode'))
-```
 
-    ## `summarise()` has grouped output by 'Park'. You can override using the `.groups` argument.
-
-``` r
 kable(fee_summaries %>% select(-parkCode))
 ```
 
@@ -939,7 +931,7 @@ ggplot(data = nc_fees, aes(y = cost, fill = Park)) +
     labs(title = 'Cost Distributions of Campgrounds')
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-58-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 If we want to see how this compares on a national level. We can create a
 histogram of the distribution of campground costs at all national parks.
@@ -953,7 +945,7 @@ ggplot(data = campground_fees, aes(x = cost)) +
     geom_histogram(bins = 50)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-59-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 Since it is not possible to neatly graph the types of campsites for each
 fee, we can instead summarise the fees at the level of the campground
@@ -975,11 +967,7 @@ ggplot(data = sites_and_fees, aes(x = cost, y = classification, fill = classific
     labs(y = NULL, title = 'Cost Distributions of Campground Classifications', subtitle = 'US National Parks')
 ```
 
-    ## Picking joint bandwidth of 4.4
-
-    ## Warning: Removed 32 rows containing non-finite values (`stat_density_ridges()`).
-
-![](README_files/figure-gfm/unnamed-chunk-60-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 #### Park Activities
 
@@ -1015,7 +1003,7 @@ ggplot(data = activites_nc, aes(x = value, y = Park, fill = name)) +
     labs(title = 'Number of Activities and Campgrounds', subtitle = 'National Parks of North Carolina', x = 'Count', y = NULL)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-61-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ### Wrap-Up
 
