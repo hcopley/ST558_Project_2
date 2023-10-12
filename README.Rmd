@@ -14,20 +14,23 @@ library(jsonlite)
 library(ggplot2)
 library(DT)
 library(ggridges)
-library(epitab)
 library(kableExtra)
 
 ```
 
 ## Requirements
 
-The packages used in this vignette are 
+The packages used in this vignette to interact with the API are: 
 
-[tidyverse](https://www.tidyverse.org/)
-[httr](https://httr2.r-lib.org/)
-[jsonlite](https://cran.r-project.org/package=jsonlite)
+[`tidyverse`](https://www.tidyverse.org/)
+[`httr`](https://httr2.r-lib.org/)
+[`jsonlite`](https://cran.r-project.org/package=jsonlite)
 
-## API
+I also used a few other packages to visualize the data: 
+
+[`DT`](https://rstudio.github.io/DT/)
+[`kableExtra`](https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_html.html)
+[`ggridges`](https://cran.r-project.org/web/packages/ggridges/vignettes/introduction.html)
 
 I wanted to query the National Parks service API which provides information about US National Parks. In order to interact with this API you will need an api key. You can register for a free API key [here](https://www.nps.gov/subjects/developer/get-started.htm). This API allows 1,000 requests per hour! That's pretty generous as far as APIs go. You can also read more information about it in the [API Guide](https://www.nps.gov/subjects/developer/guides.htm). In order to keep my own API key a secret I have aliased it in the remaining code as `my_api_key`, but you can create a variable called `my_api_key` which will be the default of the functions in this vignette, or you can simply enter your api key into the functions.  
 
@@ -38,7 +41,6 @@ I wanted to query the National Parks service API which provides information abou
 my_api_key <- 'iGcTVkjLRg4ruBc2hld67MDP0XtzaeEygeY0eUlf'
 
 ```
-
 
 ## Functions
 
@@ -122,7 +124,7 @@ get_max_results <- function(url) {
 
 #### `get_park_codes`
 
-Some NPS API endpoints do not allow the user to enter a state and instead require the park code. These definitely are not values that I would expect many people to know off of the top of their head. To help the user out I created another helper function called `get_park_codes`. This function has a state parameter which can be left blank (default null) to select all park codes, or using the `get_state_code` helper function the user can enter a state abbreviation or name. The function calls the parks endpoint and returns a character vector of all of the park codes associated with that state. 
+Some NPS API endpoints do not allow the user to enter a state and instead require the park code. These definitely are not values that I would expect many people to know off of the top of their head. I created another helper function called `get_park_codes` to solve this problem. This function has a state parameter which can be left blank (default null) to select all park codes, or using the `get_state_code` helper function the user can enter a state abbreviation or name. The function calls the parks endpoint and returns a character vector of all of the park codes associated with that state. 
 
 
 ```{r}
@@ -163,7 +165,9 @@ get_park_codes <- function(state = NULL, api_key = my_api_key) {
 
 ```
 
-Once our data has been returned from the API and parsed we will need a little extra help flattening it into a neat tibble or a list of tibbles. For example when calling the parks API endpoint the data returned contains list columns for certain variables even after using `fromJSON` in the [jsonlite](https://cran.r-project.org/web/packages/jsonlite/vignettes/json-aaquickstart.html) package. This function takes a tibble or data.frame that contains list columns and a character vector for the column name. It returns a tibble with the park code and the values of the list column as a tibble. For this we use the `unnest` function from the [purrr](https://purrr.tidyverse.org/) package. 
+#### `handle_list_columns`
+
+Once our data has been returned from the API and parsed we will need a little extra help flattening it into a neat tibble or a list of tibbles. For example when calling the parks API endpoint the data returned contains list columns for certain variables even after using `fromJSON` in the [jsonlite](https://cran.r-project.org/web/packages/jsonlite/vignettes/json-aaquickstart.html) package. This function takes a tibble or data.frame that contains list columns and a character vector for the column name. It returns a tibble with the id and the values of the list column as a tibble. For this we use the `unnest` function from the [purrr](https://purrr.tidyverse.org/) package which is part of the tidyverse. 
 
 ```{r}
 
@@ -185,6 +189,10 @@ handle_list_columns <- function(list_column, .data) {
 }
 
 ```
+
+#### `rectangle_data`
+
+Our `handle_list_columns` function gets used in a `rectangle_data` function. This function takes the data (including list columns) flattens it, finds columns that remain as lists and handles them individually. The default output is a list of dataframes, however the user can specify that they would like the data to be returned in one neat dataframe in which case the function will `enframe` and `unnest` again using the [purrr](https://purrr.tidyverse.org/). package. The data becomes longer as a result with more repeating variables due to left joins necessary to make this work. The user can also choose a single dataset from the particular api call, or a character vector of dataset names. For example the parks api endpoint has many datasets embedded within the single call including activities, or park entry fees. The user can choose how much or how little data they would like to return.  
 
 
 ```{r}
@@ -268,10 +276,9 @@ rectangle_data <- function(.data, output_tibble = FALSE, datasets = NULL) {
 
 #### `get_park_info`
 
-With the helper functions set, I'm ready to interact with the API to bring back data. The first endpoint I want to interact with is the parks endpoint. This endpoint provides a lot of information about each park as we will see. To bring back data from this endpoint I created a function `get_park_info`. The endpoint allows the user to enter a state or a park code, so we will use our `get_state_codes` helper function, but we won't need `get_park_codes` this time. We will also need our `get_max_results` and `rectangle_data` functions.
+With the helper functions set, I'm ready to interact with the API to bring back data. The first endpoint I want to interact with is the parks endpoint. This endpoint provides a lot of information about each park as we will see. To bring back data from this endpoint I created a function `get_park_info`. The endpoint allows the user to enter a state or a park code, so we will use our `get_state_codes` helper function. We will also need our `rectangle_data` function.
 
-
-I also wanted to explore the campgrounds available at the parks. The NPS API has a campground endpoint which provides information about different campsites, how many spots are available, hours of operation, types of campsites, cost, etc. To gather this data I created a `get_campground_info` function.
+I also wanted to explore the campgrounds available at the parks. The NPS API has a campground endpoint which provides information about different campsites, how many spots are available, hours of operation, types of campsites, cost, etc. In order to allow the user to select the endpoint desired ('parks', or 'campgrounds' in this example), I allow the user to enter an endpoint parameter. The user can also enter the state and/or the park code desired.   
 
 ```{r}
 
@@ -313,21 +320,6 @@ get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, 
     #get the data into a list of dataframes or a single tibble based on user selection
     out <- rectangle_data(dat, ...)
     
-    #rectangle the datasets specified by the user
-    #out <- datasets %>%
-        #name datasets list with it's own character vectors (e.g, list('activities' = 'activities', 'topics' = 'topics'))
-     #   set_names(.) %>%
-        #map over the rectangle data function to apply it to each dataset selected this will return a list of tibbles
-#        map(~rectangle_data(.data = res$data, col_name = .)) %>%
-        #prepend the remaining park information that does not contain list columns to the list
-     #   append(list('data' = res$data %>% discard(is.list) %>% select(-id) %>% tibble()), after = 0)
-    
-    #if the user selects the output to be a tibble left join the datasets together on the parkcode
-  #  if(output_tibble) {
-        
-   #     out <- out %>%
-   #         reduce(left_join, by = c('parkCode', 'name'))
-   # }
     
     #return data
     return(out)
@@ -338,7 +330,11 @@ get_park_info <- function(state = NULL, park_code = NULL, api_key = my_api_key, 
 
 ### Data Exploration
 
-### Contingency Tables
+With our API functions ready we can now start exploring the data.
+
+#### Campground Classifications
+
+The National Parks Campgrounds have several classifications based on how primative or developed they are. I first looked at all campgrounds nationally, and then narrowed the set to just the Parks in North Carolina. It looks like Great Smoky Mountains National Park has the most developed campgrounds. 
 
 ```{r}
 
@@ -350,6 +346,8 @@ campground_classifications <- get_park_info(endpoint = 'campgrounds',
 
 #get all of the park codes and names
 park_names <- get_park_codes()
+#get just the NC parks
+nc_parks <- get_park_codes(state = 'NC')
 
 #get a contingency table of campground classifications by park
 park_classifications <- park_names %>%
@@ -358,13 +356,19 @@ park_classifications <- park_names %>%
     table() %>%
     as.data.frame() %>%
     pivot_wider(names_from = classification, values_from = Freq) %>%
-    arrange(-`Developed Campground`)
+    arrange(-`Developed Campground`) %>%
+    inner_join(nc_parks, by = 'fullName') %>%
+    rename('Park' = fullName)
     
 
-datatable(park_classifications)
+knitr::kable(park_classifications %>% select(-parkCode))
 
 
 ```
+
+#### Campground Connectivity
+
+If you're like me and you enjoy "car camping" you might be interested to know how the internet and cell reception are at our national parks. The campgrounds endpoint provides that information as well as other amenities. We can create a table showing the overlap of internet service and cellphone reception. As it turns out, the majority of campgrounds don't have either, so if you want to totally unplug you're in luck. There are 13 campgrounds however that have access to both cell phone reception and internet year round.
 
 
 ```{r}
@@ -392,9 +396,13 @@ knitr::kable(internet_and_phone) %>%
 
 ```
 
-## Barplot
+#### Campground Reservability
+
+The NPS API also offers data about how many campsites are reservable vs. first-come-first-serve. We can create plots to see which parks have campgrounds that allow you to go camping without a reservation. If you're not much of a planner and you don't want to reserve a spot in advance the Blue Ridge Parkway is your best bet. 
 
 ```{r}
+
+#get northcarolina campground information by calling our api function
 campgrounds_NC <- get_park_info(state = 'NC',
                              endpoint = 'campgrounds',
                              datasets = c('main_data'), 
@@ -402,6 +410,7 @@ campgrounds_NC <- get_park_info(state = 'NC',
     inner_join(park_names, by = 'parkCode') %>%
     rename(Park = fullName, Campground = name)
 
+#pivot the data to counts of campsites by walkup vs reservable
 campsites <- campgrounds_NC %>%
     select(Park, Campground, numberOfSitesReservable, numberOfSitesFirstComeFirstServe) %>%
     mutate(reservable = as.numeric(numberOfSitesReservable), 
@@ -409,7 +418,7 @@ campsites <- campgrounds_NC %>%
            .keep = 'unused') %>%
     pivot_longer(cols = c(reservable, walkup), names_to = 'site_type', values_to = 'campsites')
 
-
+#barplot of campsites reservability
 ggplot(data = campsites, aes(x = Park, y = campsites, fill = site_type)) +
     geom_bar(position = 'stack', stat = 'identity', alpha = .7) +
     scale_x_discrete(guide = guide_axis(angle = 30)) +
@@ -419,12 +428,13 @@ ggplot(data = campsites, aes(x = Park, y = campsites, fill = site_type)) +
 
 ```
  
-## Numeric Summaries
+#### Campsite Numbers
+
+We can also create numeric summaries of the number of campsites across the parks. We already knew that the Great Smoky Mountains National Park has the most campgrounds, so it is no surprise that it also has the most campsites. The largest campground has 211 sites, but the spread is quite wide and the smallest only has 1. 
 
 ```{r}
 
-#Total Campsites
-
+#Create numeric summaries of the number of campsites at each campground in NC parks
 total_campsites <- campgrounds %>%
     select(Park, parkCode, Campground, total_sites = campsites.totalSites) %>%
     mutate(total_sites = as.numeric(total_sites)) %>%
@@ -437,13 +447,16 @@ total_campsites <- campgrounds %>%
               'Std Dev' = sd(total_sites)
               ) %>%
     ungroup() %>%
-    arrange(-`Total Campsites`)
+    arrange(-`Total Campsites`) %>%
+    inner_join(nc_parks, by = c('Park' = 'fullName', 'parkCode'))
 
-datatable(total_campsites %>% select(-parkCode))
+kable(total_campsites %>% select(-parkCode))
     
 
 ```
+#### Campsite Cost
 
+Another important factor in choosing a national park and a campground is cost. Cape Lookout National Seashore has both the most expensive and the cheapest (you can get less expensive than free!) campgrounds. The high cost is driven by cabin rentals which are also provided in the campsite fees. Unfortunately the campsite fee descriptions do not offer clean categorical groupings of the type of site and are free text values so they do not allow us to easily see which campsites are cabins vs. primitive sites in a nice graphical display. 
 
 ```{r}
 #campground_fees
@@ -464,29 +477,18 @@ fee_summaries <- campground_fees %>%
               'Highest Campsite Fee' = max(cost),
               'Std Dev' = sd(cost)) %>%
     ungroup() %>%
-    arrange(-`Median Campsite Fee`)
+    arrange(-`Median Campsite Fee`) %>%
+    inner_join(nc_parks, by = c('Park' = 'fullName', 'parkCode'))
 
-datatable(fee_summaries %>% select(-parkCode))
+kable(fee_summaries %>% select(-parkCode))
 
 ```
 
-### Histogram
-
-```{r}
-
-#histogram
-ggplot(data = campground_fees, aes(x = cost)) +
-    geom_histogram(bins = 50)
-    
-```
-
-
-### Box Plot
+We can also see the distribution of cost across North Carolina Parks visually in a boxplot. 
 
 ```{r}
 
 #how to NC Campgrounds fare in terms of fees
-nc_parks <- get_park_codes(state = 'NC')
 
 nc_fees <- campground_fees %>%
     semi_join(nc_parks, by = 'parkCode')
@@ -499,7 +501,17 @@ ggplot(data = nc_fees, aes(y = cost, fill = Park)) +
 
 ```
 
-## Scatter Plot
+If we want to see how this compares on a national level. We can create a histogram of the distribution of campground costs at all national parks. This is a very right skewed distribution and the majority of campsites are very affordable. There are however some outliers ranging all the way up to $1000!
+
+```{r}
+
+#histogram
+ggplot(data = campground_fees, aes(x = cost)) +
+    geom_histogram(bins = 50)
+    
+```
+
+Since it is not possible to neatly graph the types of campsites for each fee, we can instead summarise the fees at the level of the campground classifications. The ridges plot below is another way to visualize the distributions, but this time comparing the campground classifications instead of the parks. As expective campgrounds with a primitive camping designation tend to be on the lower end of cost, while developed campgrounds tend to be more expensive. 
 
 ```{r}
 
@@ -511,22 +523,27 @@ sites_and_fees <- campground_fees %>%
 ggplot(data = sites_and_fees, aes(x = cost, y = classification, fill = classification)) +
     geom_density_ridges(show.legend = FALSE, alpha = .5) +
     xlim(0,200) +
-    labs(y = NULL, title = 'Cost Distributions of Campground Classifications')
+    labs(y = NULL, title = 'Cost Distributions of Campground Classifications', subtitle = 'US National Parks')
 
 
 ```
 
-### Activities
+#### Park Activities
+
+If we want to know which parks will give us the most bang for our buck we can explore the activities available at each park. These activies range from fly fishing to actual flying. The Great Smoky Mountains National Park not only has the most campgrounds, but also the widest range of activities available. 
 
 ```{r}
 
+#get park activities
 activities <- get_park_info(endpoint = 'parks', datasets = 'activities', output_tibble = TRUE)
 
+#summarise the number of campgrounds
 n_campgrounds_nc <- campgrounds_NC %>%
     select(Park, Campground) %>%
     group_by(Park) %>%
     summarise(Campgrounds = n_distinct(Campground))
 
+#summarise the number of activities and join to number of campgrounds
 activites_nc <- activities %>%
     inner_join(nc_parks, by = c('parkCode', 'fullName')) %>%
     rename(Park = fullName, Activity = activitiesname) %>%
@@ -535,6 +552,7 @@ activites_nc <- activities %>%
     inner_join(n_campgrounds_nc, by = 'Park') %>%
     pivot_longer(cols = c('Activities', 'Campgrounds'))
 
+#barplot
 ggplot(data = activites_nc, aes(x = value, y = Park, fill = name)) +
     geom_bar(stat = 'identity', position = 'dodge', alpha = .7) +
      scale_fill_discrete(name = "") +
@@ -543,5 +561,8 @@ ggplot(data = activites_nc, aes(x = value, y = Park, fill = name)) +
 
 ```
 
+### Wrap-Up 
+
+To summarize we learned how to build functions to interact with 2 of the National Park Service API endpoints. We also learned how to parse through nested json data. We collected some of the data and explored Campsite data Nationally and for North Carolina. We learned that the Great Smoky Mountains National Park offers the greatest variety of activities of North Carolina National Parks and the largest number of campgrounds at an affordable price. We also learned that many of our National Parks do not offer cell phone service or internet connectivity. I hope that this vignette helps you use and interact with interact with APIs. 
 
 
